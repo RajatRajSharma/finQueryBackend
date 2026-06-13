@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────
+# FinQuery backend dependencies
+# Install:  pip install -r requirements.txt
+# ─────────────────────────────────────────────────────────────
+
+# --- Web framework / API (Week 1) ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+python-multipart==0.0.20        # parses multipart/form-data for PDF uploads
+
+# --- RAG core: ingestion + query (Week 1) ---
+# llama-index family left unpinned on purpose so pip resolves a mutually
+# compatible set with llama-index-core. Don't pin these individually.
+llama-index-core
+llama-index-vector-stores-qdrant
+llama-index-embeddings-google-genai     # Gemini embeddings
+llama-index-llms-google-genai           # Gemini generation
+qdrant-client                            # talks to the Qdrant container
+pypdf==5.1.0                             # parse PDF text + page numbers
+
+# --- Dev / testing ---
+pytest==8.3.4                            # fake-backed unit tests (no infra needed)
+
+# ─────────────────────────────────────────────────────────────
+# Week 2 / Week 3 — UNCOMMENT when you reach those phases.
+# Kept out of the Week 1 install so the first setup stays fast and
+# the resolver doesn't have to satisfy heavy eval deps yet.
+# ─────────────────────────────────────────────────────────────
+# --- Week 2: hybrid search + reranking + streaming ---
+# rank-bm25==0.2.2                       # BM25 sparse / keyword half of hybrid
+# llama-index-retrievers-bm25            # BM25 retriever integration
+# cohere==5.13.3                         # Cohere Rerank
+# llama-index-postprocessor-cohere-rerank
+# sse-starlette==2.1.3                   # SSE token streaming
+#
+# --- Week 3: RAGAS evaluation ---
+# ragas==0.2.9
+# datasets==3.2.0
