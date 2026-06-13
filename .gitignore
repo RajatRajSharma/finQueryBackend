@@ -10,9 +10,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
-# --- Data (large PDFs + local stores — keep out of Git) ---
-data/raw/*
-!data/raw/.gitkeep
+# --- Data (raw PDFs ARE committed; eval JSON kept local) ---
 data/eval/*.json
 
 # --- Qdrant local storage (if mounted) ---
