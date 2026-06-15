@@ -17,12 +17,17 @@ from tests.fakes import (
     FakeEmbedder,
     FakeLLM,
     FakeParser,
+    FakeReranker,
     FakeVectorStore,
 )
 
 _PAGES = [
     ParsedPage("Amazon.pdf", 1, "Net sales increased 12% to $574 billion."),
     ParsedPage("Amazon.pdf", 2, "Operating income was $36.9 billion."),
+]
+
+_PAGES_4 = [
+    ParsedPage("Amazon.pdf", n, f"Page {n} content.") for n in range(1, 5)
 ]
 
 
@@ -49,6 +54,28 @@ def test_retrieval_embeds_query_and_returns_hits():
 
     assert len(hits) == 2
     assert hits[0].chunk.source_file == "Amazon.pdf"
+
+
+def test_reranker_overfetches_then_keeps_top_n_reordered():
+    store = FakeVectorStore()
+    IngestionService(FakeParser(_PAGES_4), FakeChunker(), FakeEmbedder(), store).ingest_file(
+        "ignored.pdf", "Amazon.pdf", "Amazon"
+    )
+    reranker = FakeReranker()
+    service = RetrievalService(
+        FakeEmbedder(), store, top_k=2, reranker=reranker, candidates=4
+    )
+
+    hits = service.retrieve("anything")
+
+    # Over-fetched the full candidate pool (4), not just top_k (2)...
+    assert reranker.last_pool_size == 4
+    # ...then kept exactly top_k, in the reranker's order (FakeReranker reverses,
+    # so the last candidate is now first — proving the reorder took effect).
+    assert len(hits) == 2
+    assert hits[0].chunk.page_number == 4
+    # Score came from the reranker, not the store's flat 1.0.
+    assert hits[0].score == 1.0 and hits[1].score < hits[0].score
 
 
 def test_prompt_includes_context_and_question():

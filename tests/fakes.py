@@ -9,7 +9,14 @@ Gemini + Qdrant in production run here with these fakes in a millisecond.
 from __future__ import annotations
 
 from app.core.domain import Chunk, ParsedPage, SearchHit
-from app.core.interfaces import Chunker, DocumentParser, Embedder, LLMProvider, VectorStore
+from app.core.interfaces import (
+    Chunker,
+    DocumentParser,
+    Embedder,
+    LLMProvider,
+    Reranker,
+    VectorStore,
+)
 
 
 class FakeParser(DocumentParser):
@@ -90,3 +97,25 @@ class FakeLLM(LLMProvider):
     def generate(self, prompt: str) -> str:
         self.last_prompt = prompt
         return "FAKE_ANSWER"
+
+
+class FakeReranker(Reranker):
+    """Deterministic reranker: reverses the candidate order and keeps top_n.
+
+    Reversing makes the reorder observable in tests (the last candidate becomes
+    first); the descending scores prove the reranker's score replaces the
+    store's. Records the pool size it was handed so tests can assert over-fetch.
+    """
+
+    def __init__(self) -> None:
+        self.last_pool_size: int | None = None
+
+    def rerank(
+        self, question: str, hits: list[SearchHit], top_n: int
+    ) -> list[SearchHit]:
+        self.last_pool_size = len(hits)
+        reversed_hits = list(reversed(hits))[:top_n]
+        return [
+            SearchHit(chunk=h.chunk, score=1.0 - i * 0.01)
+            for i, h in enumerate(reversed_hits)
+        ]

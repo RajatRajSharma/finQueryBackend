@@ -39,7 +39,20 @@ class Settings(BaseSettings):
     # --- Retrieval / chunking knobs ---
     CHUNK_SIZE: int = 512
     CHUNK_OVERLAP: int = 50
-    TOP_K: int = 5
+    TOP_K: int = 5                              # chunks fed to the LLM (final)
+
+    # --- Week 2: reranking (Cohere) ---
+    # When ENABLE_RERANK is true, retrieval over-fetches RETRIEVE_CANDIDATES
+    # chunks and a reranker keeps the best TOP_K. Off by default so Week 1
+    # behaviour is unchanged until COHERE_API_KEY is set.
+    ENABLE_RERANK: bool = False
+    RERANK_PROVIDER: str = "cohere"
+    RERANK_MODEL: str = "rerank-english-v3.0"
+    RETRIEVE_CANDIDATES: int = 20               # over-fetch pool before rerank
+
+    # --- Week 2: hybrid retrieval (dense + BM25) ---
+    ENABLE_HYBRID: bool = False
+    HYBRID_ALPHA: float = 0.5                   # 1.0 = dense only, 0.0 = sparse only
 
     # --- CORS: which frontend origin may call this API ---
     FRONTEND_ORIGIN: str = "http://localhost:5173"

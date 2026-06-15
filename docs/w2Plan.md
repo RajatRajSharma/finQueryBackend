@@ -1,8 +1,10 @@
 # FinQuery — Week 2 Plan (Make it impressive)
 
-> **Goal of Week 2:** take the working Week 1 slice and make the answers *visibly better and nicer* — **hybrid retrieval (dense + BM25) → Cohere reranking → richer citations in the UI → SSE token streaming → UI polish.** Keep a working slice at all times: every change is additive and falls back to the Week 1 path if a key/dep is missing.
+> **Goal of Week 2:** take the working Week 1 slice and make the answers *visibly better and nicer* — **rich citations → Cohere reranking → hybrid retrieval (dense + BM25) → SSE token streaming → UI polish.** Keep a working slice at all times: every change is additive and gated behind an `ENABLE_*` flag, so it falls back to the Week 1 path if a key/dep is missing.
 >
 > Read [finQueryArchitecture.md](finQueryArchitecture.md) (§4.2 query pipeline) first. This implements **Phase 2** from [Idea1.md](Idea1.md).
+
+**Status legend:** ✅ done · 🔄 in progress · ⏳ to do · ⏸ deferred (blocked on a key/dep)
 
 ---
 
@@ -18,80 +20,95 @@
 
 ---
 
-## Pre-flight (Day 0 — ~1 hr)
+## Execution order (risk-adjusted, not calendar order)
+
+Ordered by **value ÷ risk** so the demo improves even if a hard item slips. Each day is independent and shippable on its own.
+
+1. **Citations in the UI** — backend already returns `snippet`+`score`; pure frontend, no keys/deps. Easiest win. → *Day 1*
+2. **Cohere reranking** — clean interface, one SDK call; biggest answer-quality lever. → *Day 2*
+3. **Hybrid retrieval (BM25)** — local, no key, but LlamaIndex integration + "where does the index live" carry real friction. → *Day 3*
+4. **SSE streaming** — biggest *perceived* win, but the fiddliest (POST + ReadableStream + trailing citations event). → *Day 4*
+5. **Polish + measure** → *Day 5*
+
+---
+
+## Pre-flight (Day 0 — ~1–2 hrs)
 
 - ⏳ Get a **Cohere API key** → `COHERE_API_KEY` in `.env` (https://dashboard.cohere.com/api-keys)
 - ⏳ Uncomment the **Week 2 deps** in [requirements.txt](../requirements.txt) and `pip install -r requirements.txt`:
   `rank-bm25`, `llama-index-retrievers-bm25`, `cohere`, `llama-index-postprocessor-cohere-rerank`, `sse-starlette`
-- ⏳ Add Week 2 knobs to `config.py` + `.env.example`: `RERANK_PROVIDER=cohere`, `RERANK_MODEL`, `RETRIEVE_CANDIDATES=20`, `HYBRID_ALPHA=0.5`, `ENABLE_RERANK=true`, `ENABLE_HYBRID=true`
+- ✅ Add Week 2 knobs to `config.py` + `.env.example`: `ENABLE_RERANK`, `RERANK_PROVIDER`, `RERANK_MODEL`, `RETRIEVE_CANDIDATES`, `ENABLE_HYBRID`, `HYBRID_ALPHA` (all default to the Week 1 behaviour)
+- ⏳ **De-risk spikes (~1 hr each, do before committing a full day):**
+  - SSE: a throwaway token round-trip (backend `sse-starlette` → browser `ReadableStream`) to learn the real cost
+  - (Week 3) RAGAS: a 2-question RAGAS-on-Gemini run, to surface the Gemini-judge compat + quota issues early
 - ⏳ Confirm Week 1 still green: `pytest -q` (5/5) and a live Apple query still returns a cited answer
 
-> **Free-tier quota reminder:** Gemini embeds are capped ~100/min — re-ingesting for BM25 stays small, but don't bulk re-embed all 8 reports in one go (see Week 1 learnings).
+> **Free-tier quota reminder:** Gemini embeds are capped ~100/min — re-ingesting for BM25 stays small, but don't bulk re-embed all 8 reports in one go (see the project memory + Week 1 learnings).
 
 ---
 
-## Day 1 — Hybrid retrieval (dense + BM25 keyword)
+## Day 1 — Citations in the UI  ✅
 
-Adds the sparse half of [§4.2 step 3](finQueryArchitecture.md). Vector search nails *meaning*; BM25 nails *exact terms* ("Q4 2024", ticker symbols, line-item names). Fusing both catches what either misses.
+Implements [§4.2 step 8](finQueryArchitecture.md) richly. The backend's `Citation` already carries `source_file`, `company`, `page_number`, `snippet`, and `score` — Week 1 only rendered file + page. Surface the rest. Pure frontend, no keys/deps, fully verifiable. (The frontend uses a feature-based structure + a CSS design-token system — `src/styles/tokens.css` — not Tailwind; polish within it.)
 
-- ⏳ New interface `SparseRetriever` (or `KeywordIndex`) in `core/interfaces.py` — `search(question, k) -> list[SearchHit]`
-- ⏳ `clients/bm25_index.py` (or `processing/`) — wrap `llama-index-retrievers-bm25` / `rank-bm25` over the stored chunk text
-- ⏳ Decide **where BM25 lives** (write it down): rebuild the index from Qdrant payloads on startup/after each ingest (simplest), *or* persist it. Note the trade-off in the file docstring.
-- ⏳ `services/retrieval.py` — add a `HybridRetriever` path: run dense + sparse, **fuse** (Reciprocal Rank Fusion or weighted by `HYBRID_ALPHA`) → top `RETRIEVE_CANDIDATES` (~20)
-- ⏳ `factory.py` — `get_sparse_retriever()` + assemble hybrid into `get_retrieval_service()`, gated by `ENABLE_HYBRID`
-- ⏳ Tests: extend `tests/fakes.py` with a fake sparse retriever; assert fusion ordering deterministically (no infra)
+- ✅ Extend the frontend `Citation` type with optional `company`, `snippet`, `score`
+- ✅ `Chat.tsx` — map the full citation (not just `{doc, page}`) from the `/query` response
+- ✅ `ChatArea` — expandable citation chips: file · page · score%, click to reveal the snippet (native `<details>` for accessibility)
+- ✅ Verified `npm run build` + `npm run lint` green; live `/query` confirms citations carry snippet + score (e.g. AppleInc.pdf p.9, 0.745)
 
-**End of day:** `/query` retrieves ~20 fused candidates from dense + keyword search; falls back to dense-only if `ENABLE_HYBRID=false`.
+**End of day:** ✅ every answer shows clickable citations with page, relevance score, and a snippet preview.
 
 ---
 
-## Day 2 — Cohere reranking
+## Day 2 — Cohere reranking  ✅ (code) · ⏸ (live)
 
-Implements [§4.2 step 4](finQueryArchitecture.md). Take the ~20 fused candidates and let a cross-encoder keep the genuinely-best 3–5. This is the single biggest answer-quality lever.
+Implements [§4.2 step 4](finQueryArchitecture.md). Take ~20 candidates and let a cross-encoder keep the genuinely-best 3–5. The single biggest answer-quality lever. (Code lands now behind `ENABLE_RERANK=false`; flip on once the Cohere key is set.)
 
-- ⏳ New interface `Reranker` in `core/interfaces.py` — `rerank(question, hits, top_n) -> list[SearchHit]`
-- ⏳ Fill the `clients/cohere_client.py` **stub** → `CohereReranker(Reranker)` (the ONLY file importing the `cohere` SDK), raising `ConfigurationError` on missing key and translating Cohere API errors to `UpstreamServiceError` → 503 (mirror the Gemini pattern in [gemini_client.py](../app/clients/gemini_client.py))
-- ⏳ `factory.py` — `get_reranker()` (provider switch), inject into `RetrievalService`, gated by `ENABLE_RERANK`
-- ⏳ Pipeline: hybrid → `RETRIEVE_CANDIDATES` (~20) → rerank → `TOP_K` (3–5) → generate
-- ⏳ Tests: fake reranker that reorders predictably; assert only `top_n` survive
+- ✅ New interface `Reranker` in `core/interfaces.py` — `rerank(question, hits, top_n) -> list[SearchHit]`
+- ✅ Filled the `clients/cohere_client.py` **stub** → `CohereReranker(Reranker)` (the ONLY file importing the `cohere` SDK), raising `ConfigurationError` on missing key and translating Cohere errors to `UpstreamServiceError` → 503 (mirrors the Gemini pattern in [gemini_client.py](../app/clients/gemini_client.py))
+- ✅ `factory.py` — `get_reranker()` returns `None` when `ENABLE_RERANK=false` and lazy-imports the SDK only when enabled (verified: app boots with cohere unimported); injected into `RetrievalService`
+- ✅ `services/retrieval.py` — over-fetch `RETRIEVE_CANDIDATES` then rerank → `TOP_K`; with no reranker, behaves exactly like Week 1
+- ✅ Tests: `FakeReranker` proves over-fetch + reorder + top_n trim (pytest 6/6)
+- ⏸ **Live-verify** reranking against the real Cohere API — *deferred until `COHERE_API_KEY` is set + `ENABLE_RERANK=true` + `pip install cohere`*
 
-**End of day:** answers are built from reranked top chunks; toggle `ENABLE_RERANK=false` to compare.
-
----
-
-## Day 3 — SSE token streaming
-
-Implements [§4.2 step 7](finQueryArchitecture.md). The answer "types out" live instead of appearing after a pause — the single biggest *perceived* speed/quality win.
-
-- ⏳ Extend `LLMProvider` with `generate_stream(prompt) -> Iterator[str]`; implement on `GeminiLLM` via the SDK's streaming API (keep the existing non-streaming `generate()` for evals/tests)
-- ⏳ `services/generation.py` — `generate_answer_stream(question, contexts)` yielding text deltas
-- ⏳ `routers/query.py` — add `POST /query/stream` returning `text/event-stream` via `sse-starlette`; send the **answer tokens first, then a final `citations` event** (so the UI can render chips once retrieval metadata is known). Keep `POST /query` as the non-streaming path.
-- ⏳ Frontend `src/shared/api/` — a streaming helper (fetch + `ReadableStream`/`EventSource`) and a `useStreamingQuery` hook
-- ⏳ Frontend `Chat.tsx` / `ChatArea` — append tokens to the assistant bubble as they arrive (replaces the single pending→final swap from Week 1), then attach citations on the final event
-
-**End of day:** ask a question in the browser and watch the answer stream token-by-token, citations appearing at the end.
+**End of day (code):** ✅ rerank path built + fake-tested; `ENABLE_RERANK=true` + a key turns it on with zero router changes.
 
 ---
 
-## Day 4 — Citations + UI polish
+## Day 3 — Hybrid retrieval (dense + BM25 keyword)
 
-Implements [§4.2 step 8](finQueryArchitecture.md) richly, and makes the whole thing look like a product. (The frontend already uses a feature-based structure with a CSS design-token system — `src/styles/tokens.css` — not Tailwind; polish within that system, don't rip it out.)
+Adds the sparse half of [§4.2 step 3](finQueryArchitecture.md). Vector search nails *meaning*; BM25 nails *exact terms* ("Q4 2024", ticker symbols, line-item names). Fusing both catches what either misses. (Needs the Week 2 deps installed — do this as a deliberate step; LlamaIndex sub-packages are unpinned and can churn the resolve.)
 
-- ⏳ Backend already returns `snippet` + `score` per citation — surface them: expandable citation chips showing the source file, page, score, and snippet preview
-- ⏳ `features/chat` — tidy message bubbles, streaming caret, copy-answer button, scroll-to-latest
-- ⏳ `features/documents` — clearer processing/ready/error states (carried from Week 1), multi-doc "ask across all reports" affordance
-- ⏳ Empty/loading/error polish across the chat + documents panels; mobile-reasonable layout
-- ⏳ Verify `npm run build` + `npm run lint` stay green
+- ⏳ New interface `SparseRetriever` in `core/interfaces.py` — `search(question, k) -> list[SearchHit]`
+- ⏳ `clients/bm25_index.py` — wrap `llama-index-retrievers-bm25` / `rank-bm25` over the stored chunk text
+- ⏳ Decide **where BM25 lives** (write it in the docstring): rebuild from Qdrant payloads on startup/after ingest (simplest) vs persist. Note the trade-off.
+- ⏳ `services/retrieval.py` — `HybridRetriever`: dense + sparse, **fuse** (RRF or weighted by `HYBRID_ALPHA`) → `RETRIEVE_CANDIDATES`, then the Day-2 reranker
+- ⏳ `factory.py` — `get_sparse_retriever()`; assemble hybrid, gated by `ENABLE_HYBRID`
+- ⏳ Tests: fake sparse retriever; assert fusion ordering deterministically (no infra)
 
-**End of day:** the UI is demo-ready — streamed answers with clean, clickable citations.
+**End of day:** `/query` fuses dense + keyword candidates; `ENABLE_HYBRID=false` falls back to dense-only.
+
+---
+
+## Day 4 — SSE token streaming
+
+Implements [§4.2 step 7](finQueryArchitecture.md). The answer "types out" live — the biggest *perceived* win, and the fiddliest item. Do the spike first.
+
+- ⏳ Extend `LLMProvider` with `generate_stream(prompt) -> Iterator[str]`; implement on `GeminiLLM` (keep non-streaming `generate()` for evals/tests)
+- ⏳ `services/generation.py` — `generate_answer_stream(question, contexts)` yielding deltas
+- ⏳ `routers/query.py` — add `POST /query/stream` (`text/event-stream` via `sse-starlette`): stream answer tokens, then a **final `citations` event**. Keep `POST /query` as the non-streaming path.
+- ⏳ Frontend `src/shared/api/` — streaming helper (fetch + `ReadableStream`) + `useStreamingQuery` hook
+- ⏳ Frontend `Chat.tsx` / `ChatArea` — append tokens to the assistant bubble live, attach citations on the final event
+
+**End of day:** ask in the browser and watch the answer stream token-by-token, citations at the end.
 
 ---
 
 ## Day 5 — Quality pass, measure, buffer
 
-- ⏳ Tune retrieval: `RETRIEVE_CANDIDATES`, `HYBRID_ALPHA`, `TOP_K`, chunk size — eyeball answer quality on 5–10 real questions across 2–3 reports
-- ⏳ Capture an informal **before/after**: dense-only vs hybrid+rerank on the same questions (the rigorous RAGAS numbers come in Week 3 — this is the qualitative preview)
-- ⏳ Update `README.md`: hybrid + rerank + streaming sections, new env vars, the `ENABLE_*` toggles
+- ⏳ Tune retrieval: `RETRIEVE_CANDIDATES`, `HYBRID_ALPHA`, `TOP_K`, chunk size — eyeball quality on 5–10 real questions across 2–3 reports
+- ⏳ Capture an informal **before/after**: dense-only vs hybrid+rerank on the same questions (rigorous RAGAS numbers come in Week 3)
+- ⏳ Update `README.md`: citations, rerank, hybrid, streaming + new env vars / `ENABLE_*` toggles
 - ⏳ Commit both repos with a clean Phase-2 state
 - ⏳ **Buffer** — streaming/SSE and BM25 persistence usually eat a half-day; this absorbs it
 

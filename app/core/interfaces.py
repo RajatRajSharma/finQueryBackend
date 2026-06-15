@@ -87,3 +87,19 @@ class LLMProvider(ABC):
     @abstractmethod
     def generate(self, prompt: str) -> str:
         ...
+
+
+class Reranker(ABC):
+    """Re-scores retrieved chunks for true relevance and keeps the best few.
+
+    Week 2 quality lever (the cross-encoder half of the query pipeline). Takes
+    the over-fetched candidate hits and returns at most `top_n`, reordered by
+    the reranker's own relevance score. Like every other contract here it's
+    vendor-agnostic — Cohere today, swap by adding one class + one factory line.
+    """
+
+    @abstractmethod
+    def rerank(
+        self, question: str, hits: list[SearchHit], top_n: int
+    ) -> list[SearchHit]:
+        ...

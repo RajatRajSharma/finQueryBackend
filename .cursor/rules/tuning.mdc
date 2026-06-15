@@ -1,0 +1,33 @@
+---
+description: Keep the env/tuning log in sync and consult it before tuning
+globs:
+  - "app/config.py"
+  - ".env"
+  - ".env.example"
+  - "docs/tuning.md"
+alwaysApply: true
+---
+
+# Env & tuning log discipline
+
+There is a living tuning table at `docs/tuning.md` tracking every configurable
+env var, its current value, and a **confidence %** (how close to optimal, tied
+to an evidence level: `untested` ≤55%, `eyeballed` ≤80%, `RAGAS` up to 100%).
+
+When working on FinQuery:
+
+1. **Before tuning or recommending a value**, read `docs/tuning.md` to see the
+   current value, its confidence, and the planned next step. Don't re-derive
+   from scratch.
+2. **Whenever you add, remove, or change an env var** (in `app/config.py`,
+   `.env`, or `.env.example`), update `docs/tuning.md` in the same change:
+   add/update the row, set the confidence + evidence level honestly, and add a
+   dated line to the Changelog.
+3. **Confidence is honest, not decorative.** Only raise a value to `RAGAS`
+   evidence (and >80%) once Week 3 RAGAS numbers actually back it. Until then it
+   stays `untested`/`eyeballed`. Never invent a precise % that implies a
+   measurement we don't have.
+4. Recompute the **Overall setup validation** line when several rows change.
+
+The point: anyone (human or assistant) can glance at the table to know what's
+proven vs. guessed, and tuning work is always recorded so it compounds.

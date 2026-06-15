@@ -22,6 +22,7 @@ from app.core.interfaces import (
     DocumentParser,
     Embedder,
     LLMProvider,
+    Reranker,
     VectorStore,
 )
 from app.processing.chunker import SentenceChunker
@@ -55,6 +56,23 @@ def get_llm() -> LLMProvider:
     #     from app.clients.openai_client import OpenAILLM
     #     return OpenAILLM(settings.OPENAI_API_KEY, settings.LLM_MODEL)
     raise ValueError(f"Unsupported LLM_PROVIDER: {settings.LLM_PROVIDER!r}")
+
+
+@lru_cache
+def get_reranker() -> Reranker | None:
+    """The Week 2 reranker, or None when disabled (then retrieval = Week 1).
+
+    Returns None unless ENABLE_RERANK is true, so the cohere SDK is only
+    imported (and a key only required) when reranking is actually switched on.
+    """
+    if not settings.ENABLE_RERANK:
+        return None
+    provider = settings.RERANK_PROVIDER.lower()
+    if provider == "cohere":
+        from app.clients.cohere_client import CohereReranker
+
+        return CohereReranker(api_key=settings.COHERE_API_KEY, model=settings.RERANK_MODEL)
+    raise ValueError(f"Unsupported RERANK_PROVIDER: {settings.RERANK_PROVIDER!r}")
 
 
 @lru_cache
@@ -93,11 +111,17 @@ def get_ingestion_service() -> IngestionService:
 
 
 def get_retrieval_service() -> RetrievalService:
-    """Assemble the retrieval step (embedder + vector store)."""
+    """Assemble the retrieval step (embedder + vector store + optional reranker).
+
+    When ENABLE_RERANK is off, get_reranker() is None and this is exactly the
+    Week 1 dense-only retriever.
+    """
     return RetrievalService(
         embedder=get_embedder(),
         vector_store=get_vector_store(),
         top_k=settings.TOP_K,
+        reranker=get_reranker(),
+        candidates=settings.RETRIEVE_CANDIDATES,
     )
 
 
