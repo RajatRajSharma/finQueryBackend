@@ -13,14 +13,35 @@ RETRIEVAL_QUERY); Gemini uses that hint to place them in a compatible space.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from typing import Iterator
+
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
-from app.core.errors import ConfigurationError
+from app.core.errors import ConfigurationError, UpstreamServiceError
 from app.core.interfaces import Embedder, LLMProvider
 
 # Gemini caps how many inputs one embed call accepts; batch under it.
 _MAX_BATCH = 100
+
+
+@contextmanager
+def _translate_gemini_errors(action: str) -> Iterator[None]:
+    """Turn google-genai SDK failures into a clean UpstreamServiceError.
+
+    The SDK raises APIError (and subclasses ServerError/ClientError) on overload,
+    rate limits, and 5xx responses. Left unhandled these bubble up as a raw HTTP
+    500; translating them lets the app-level handler return a clear 503 instead.
+    """
+    try:
+        yield
+    except genai_errors.APIError as exc:
+        raise UpstreamServiceError(
+            f"Gemini failed while {action} (code {exc.code}): {exc.message}. "
+            "This is usually transient — please retry shortly."
+        ) from exc
 
 
 class GeminiEmbedder(Embedder):
@@ -41,26 +62,28 @@ class GeminiEmbedder(Embedder):
         vectors: list[list[float]] = []
         for start in range(0, len(texts), _MAX_BATCH):
             batch = texts[start : start + _MAX_BATCH]
-            response = self._client.models.embed_content(
-                model=self._model,
-                contents=batch,
-                config=types.EmbedContentConfig(
-                    task_type="RETRIEVAL_DOCUMENT",
-                    output_dimensionality=self._dimension,
-                ),
-            )
+            with _translate_gemini_errors("embedding documents"):
+                response = self._client.models.embed_content(
+                    model=self._model,
+                    contents=batch,
+                    config=types.EmbedContentConfig(
+                        task_type="RETRIEVAL_DOCUMENT",
+                        output_dimensionality=self._dimension,
+                    ),
+                )
             vectors.extend(e.values for e in response.embeddings)
         return vectors
 
     def embed_query(self, text: str) -> list[float]:
-        response = self._client.models.embed_content(
-            model=self._model,
-            contents=text,
-            config=types.EmbedContentConfig(
-                task_type="RETRIEVAL_QUERY",
-                output_dimensionality=self._dimension,
-            ),
-        )
+        with _translate_gemini_errors("embedding the query"):
+            response = self._client.models.embed_content(
+                model=self._model,
+                contents=text,
+                config=types.EmbedContentConfig(
+                    task_type="RETRIEVAL_QUERY",
+                    output_dimensionality=self._dimension,
+                ),
+            )
         return response.embeddings[0].values
 
 
@@ -80,9 +103,10 @@ class GeminiLLM(LLMProvider):
         self._model = model
 
     def generate(self, prompt: str) -> str:
-        response = self._client.models.generate_content(
-            model=self._model,
-            contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.2),
-        )
+        with _translate_gemini_errors("generating the answer"):
+            response = self._client.models.generate_content(
+                model=self._model,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.2),
+            )
         return response.text or ""

@@ -15,3 +15,13 @@ class ConfigurationError(RuntimeError):
     Surfaced to clients as HTTP 503 Service Unavailable — the service is
     correctly built but not yet configured to do the work.
     """
+
+
+class UpstreamServiceError(RuntimeError):
+    """A downstream vendor API (Gemini, etc.) failed transiently.
+
+    Covers overload ("high demand"), rate limits, timeouts, and 5xx responses
+    from a provider SDK. Surfaced to clients as HTTP 503 so the cause is clear
+    (the service is up, but a dependency it relies on is momentarily unavailable)
+    instead of leaking as a raw 500. Retrying shortly usually succeeds.
+    """

@@ -79,9 +79,32 @@ Ingests every PDF in `data/raw/` through the real pipeline.
 
 ### 3.5 Start Qdrant (when you're ready for retrieval)
 ```powershell
-docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
-# dashboard: http://localhost:6333/dashboard
+# Recommended — uses docker-compose.yml (persists vectors in a named volume):
+docker compose up -d qdrant
+# dashboard: http://localhost:6333/dashboard   |   readiness: http://localhost:6333/readyz
+
+# Or run the whole stack (Qdrant + the API) in containers:
+docker compose up --build
 ```
+
+### 3.6 Ingest the corpus / run a quick demo
+The 8 real 10-Ks in `data/raw/` are **text-based** — e.g. uploading `AppleInc.pdf` yields
+32 pages → 64 chunks stored, and a query returns a grounded, cited answer:
+```powershell
+docker compose up -d qdrant             # ensure Qdrant is up
+curl -X POST http://localhost:8000/upload -F 'file=@data/raw/AppleInc.pdf;type=application/pdf'
+#  -> {"pages_parsed":32,"chunks_created":64,"chunks_stored":64}
+curl -X POST http://localhost:8000/query -H 'Content-Type: application/json' `
+  -d '{"question":"What were Apple total net sales?"}'
+#  -> grounded answer + citations (AppleInc.pdf, p.4 ...)
+```
+> **Free-tier embed quota:** Gemini caps embeds at ~100 requests/min, so ingesting all 8 reports
+> at once hits HTTP 429 (the backend surfaces this as a clean **503 "retry shortly"**). Ingest a
+> few at a time, or space out `python -m scripts.ingest_corpus`.
+
+**Offline fixture (no real corpus / no quota needed):** `scripts/make_sample_pdf.py` writes a tiny
+synthetic text-based `data/raw/Acme.pdf` for deterministic end-to-end tests (`pip install fpdf2`
+first — it's dev-only, not a runtime dependency).
 
 ---
 
@@ -168,6 +191,7 @@ finQueryBackend/
 │                                #   QueryRequest, Citation, QueryResponse, ...)
 │
 ├── scripts/ingest_corpus.py     # CLI: batch-ingest every PDF in data/raw/
+├── scripts/make_sample_pdf.py   # CLI: generate a text-based test PDF (data/raw/Acme.pdf)
 ├── tests/                       # fakes.py + test_pipeline.py (5 tests, no infra)
 ├── data/raw/                    # the annual-report PDFs
 ├── requirements.txt · .env.example · Dockerfile · docker-compose.yml
@@ -277,6 +301,12 @@ services and are used directly as FastAPI `Depends(...)`.
 `@app.exception_handler(ConfigurationError)` in `main.py` turns it into a clean **HTTP 503** — even
 when it's raised during dependency construction (before the endpoint body runs).
 
+Transient **vendor** failures get the same treatment: the Gemini SDK's `APIError` (overload /
+rate-limit / 5xx — e.g. `gemini-2.5-flash` returning *"experiencing high demand"*) is translated
+to `UpstreamServiceError` in `gemini_client.py` and surfaced as a clean **HTTP 503** with a "retry
+shortly" message — never a raw 500. The frontend's `ApiError` carries the status so the UI can show
+that message in the chat instead of crashing.
+
 ---
 
 ## 7. Backend workflows
@@ -330,8 +360,13 @@ flowchart TD
 - ✅ **Health split** into liveness + readiness (production pattern).
 - ✅ **Centralized error handling** — config errors → clean 503, never a raw 500.
 - ✅ **5/5 passing tests** with fake interfaces — no infra needed.
+- ✅ **Live Qdrant wiring proven** — `docker compose up -d qdrant`, ingest the real Apple 10-K
+  (64 chunks), query → grounded cited answer (p.4); `/health/ready` reports `qdrant:true`.
+- ✅ **Upstream errors hardened** — Gemini overload/5xx → clean HTTP 503, never a raw 500.
+- ✅ **React frontend wired live** — upload + query against the API, with loading/error states
+  and CORS confirmed for `http://localhost:5173`.
 
-**Pending (next):** live Qdrant wiring (just a config swap), real text-based PDFs, then the React frontend.
+**Pending (next, Week 2):** hybrid search + Cohere rerank + SSE streaming + UI polish.
 
 ---
 
@@ -342,7 +377,8 @@ flowchart TD
 - **Separate domain models from API schemas** so the engine and the wire format evolve independently.
 - **Fail fast, but translate failures.** Raising `ConfigurationError` at construction + one exception handler beats scattering `try/except` everywhere.
 - **Liveness ≠ readiness.** Splitting them is what lets orchestrators restart vs. load-balancers route correctly.
-- **Validate inputs early:** the corpus turned out to be image-only PDFs — `pypdf` extracts no text, so ingestion correctly produced zero chunks. Always sanity-check that PDFs are text-selectable.
+- **Validate inputs early:** the *first* corpus was image-only PDFs — `pypdf` extracted no text, so ingestion correctly produced zero chunks (a real signal, not a crash). Swapping in text-based 10-Ks made it work immediately. Always sanity-check that PDFs are text-selectable.
+- **Translate vendor errors, don't leak them:** a live Gemini overload (503) and free-tier rate limit (429) both surfaced during testing. Wrapping the SDK's `APIError` into `UpstreamServiceError` → HTTP 503 keeps the contract honest and tells the client to retry.
 
 ---
 

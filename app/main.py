@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.core.errors import ConfigurationError
+from app.core.errors import ConfigurationError, UpstreamServiceError
 from app.routers import health, query, upload
 
 app = FastAPI(title="FinQuery API", version="0.1.0")
@@ -32,6 +32,17 @@ async def _configuration_error_handler(
 
     Catches the error wherever it's raised, including during dependency
     construction (which runs before the endpoint body)."""
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(UpstreamServiceError)
+async def _upstream_service_error_handler(
+    request: Request, exc: UpstreamServiceError
+) -> JSONResponse:
+    """A vendor dependency (Gemini) failed transiently -> 503, not a raw 500.
+
+    Keeps the contract honest: the service is up, but a provider it depends on
+    is momentarily unavailable (overload/rate-limit/timeout). Clients can retry."""
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 # Mount routers. The evals router gets added in Week 3.
