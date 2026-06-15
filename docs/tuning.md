@@ -62,3 +62,4 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 
 - **2026-06-16** — initial table. Week 2 Days 1–2 done (citations live; rerank code-complete, off). All retrieval values still pre-RAGAS (eyeballed/untested).
 - **2026-06-16** — Week 2 Days 3–4 done. Hybrid (dense+BM25) built + verified live; `HYBRID_ALPHA`/`RETRIEVE_CANDIDATES` now `eyeballed`. SSE streaming added (no new env knobs). Defaults still ship hybrid/rerank **off** until measured.
+- **2026-06-16** — Week 2 Day 5 done. Logged a dense-vs-hybrid retrieval comparison in [tuning-runs.md](tuning-runs.md) (hybrid sharpens top-hit toward keyword pages, no regression). Rigorous `CHUNK_SIZE`/`TOP_K`/`HYBRID_ALPHA` sweep deferred to Week 3 RAGAS.

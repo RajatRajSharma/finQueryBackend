@@ -35,7 +35,9 @@ Everything in the code is just implementing one of those steps.
 | Vector DB | **Qdrant** (Docker or embedded) |
 | Testing | **pytest** (fake-backed, zero infra) |
 
-> Week 2/3 will add BM25 hybrid search, Cohere reranking, SSE streaming, an agent router, and RAGAS evaluation. Their stub files already exist (`agent.py`, `evaluation.py`, `cohere_client.py`, `evals.py`).
+> **Week 2 (done):** BM25 hybrid retrieval (dense + keyword, fused), Cohere reranking (built, gated behind `ENABLE_RERANK`), SSE token streaming (`POST /query/stream`), and richer citations (snippet + score) in the UI. All additive and flag-gated — defaults reproduce Week 1.
+>
+> **Week 3 (next):** an agent router and RAGAS evaluation. Their stub files still exist (`agent.py`, `evaluation.py`, `evals.py`); `cohere_client.py` is now implemented.
 
 ---
 
@@ -116,6 +118,7 @@ first — it's dev-only, not a runtime dependency).
 | `GET` | http://localhost:8000/health/ready | Readiness — is Qdrant reachable? | Qdrant |
 | `POST` | http://localhost:8000/upload | Ingest a PDF (parse→chunk→embed→store) | key + Qdrant |
 | `POST` | http://localhost:8000/query | Ask a question → cited answer | key + Qdrant |
+| `POST` | http://localhost:8000/query/stream | Ask a question → answer streamed token-by-token (SSE), then a citations event | key + Qdrant |
 | `GET` | http://localhost:8000/docs | Swagger UI | — |
 
 ### Examples
@@ -393,4 +396,9 @@ flowchart TD
 | `LLM_MODEL` | `gemini-2.5-flash` | generation |
 | `QDRANT_URL` / `QDRANT_COLLECTION` | `http://localhost:6333` / `finquery_chunks` | vector DB |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` / `TOP_K` | `512` / `50` / `5` | retrieval knobs |
+| `ENABLE_RERANK` / `RERANK_PROVIDER` / `RERANK_MODEL` | `false` / `cohere` / `rerank-english-v3.0` | Week 2 Cohere rerank (needs `COHERE_API_KEY` + `pip install cohere`) |
+| `ENABLE_HYBRID` / `HYBRID_ALPHA` | `false` / `0.5` | Week 2 dense+BM25 fusion (`1.0`=dense only, `0.0`=BM25 only) |
+| `RETRIEVE_CANDIDATES` | `20` | over-fetch pool before fuse/rerank |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | CORS allow-list |
+
+> See [docs/tuning.md](docs/tuning.md) for current values + confidence, and [docs/tuning-runs.md](docs/tuning-runs.md) for logged dense-vs-hybrid runs.

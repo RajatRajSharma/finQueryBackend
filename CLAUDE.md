@@ -11,6 +11,8 @@ Agentic RAG over company 10-Ks. Read [docs/finQueryArchitecture.md](docs/finQuer
 - **Before tuning or suggesting a value**, consult `docs/tuning.md` first.
 - **Whenever you change an env var** (`app/config.py`, `.env`, `.env.example`),
   update the matching row + Changelog in `docs/tuning.md` in the same change.
+- **When you test a config change** (run a query/comparison under a given
+  config), append the call + result to `docs/tuning-runs.md` so it's recorded.
 - Confidence is honest: only mark a value `RAGAS`/>80% once Week 3 RAGAS numbers
   back it. Never invent a precise % implying a measurement we don't have.
 

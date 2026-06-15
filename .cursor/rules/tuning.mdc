@@ -5,6 +5,7 @@ globs:
   - ".env"
   - ".env.example"
   - "docs/tuning.md"
+  - "docs/tuning-runs.md"
 alwaysApply: true
 ---
 
@@ -28,6 +29,9 @@ When working on FinQuery:
    stays `untested`/`eyeballed`. Never invent a precise % that implies a
    measurement we don't have.
 4. Recompute the **Overall setup validation** line when several rows change.
+5. **Log test runs** in `docs/tuning-runs.md`: when you run a query/comparison
+   under a specific config, append a dated block (config + question + result) so
+   the call→config→response trail is recorded, not just left in the terminal.
 
 The point: anyone (human or assistant) can glance at the table to know what's
 proven vs. guessed, and tuning work is always recorded so it compounds.

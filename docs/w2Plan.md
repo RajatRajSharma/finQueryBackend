@@ -104,15 +104,17 @@ Implements [§4.2 step 7](finQueryArchitecture.md). The answer "types out" live 
 
 ---
 
-## Day 5 — Quality pass, measure, buffer
+## Day 5 — Quality pass, measure, buffer  ✅
 
-- ⏳ Tune retrieval: `RETRIEVE_CANDIDATES`, `HYBRID_ALPHA`, `TOP_K`, chunk size — eyeball quality on 5–10 real questions across 2–3 reports
-- ⏳ Capture an informal **before/after**: dense-only vs hybrid+rerank on the same questions (rigorous RAGAS numbers come in Week 3)
-- ⏳ Update `README.md`: citations, rerank, hybrid, streaming + new env vars / `ENABLE_*` toggles
-- ⏳ Commit both repos with a clean Phase-2 state
-- ⏳ **Buffer** — streaming/SSE and BM25 persistence usually eat a half-day; this absorbs it
+- ✅ Built `scripts/compare_retrieval.py` and ran a **dense-vs-hybrid** before/after on 5 real Apple questions (embed-once, no generation quota). Hybrid sharpens the top hit toward exact-keyword pages; no regression. Logged in [tuning-runs.md](tuning-runs.md).
+- ✅ Updated `README.md`: Week 2 status, `/query/stream` endpoint, and the new `ENABLE_*` / hybrid / rerank env vars
+- ✅ `docs/tuning.md` + `docs/tuning-runs.md` capture current values (confidence) and the actual runs
+- ✅ Commit both repos with a clean Phase-2 state
+- ⏳ Rigorous tuning sweep (`CHUNK_SIZE` / `TOP_K` / `HYBRID_ALPHA`) deferred to **Week 3 RAGAS** — that's the right tool to measure it; eyeballing it now would just be guessing with extra steps
 
-**End of Week 2 demo:** ask a question → answer streams in live → reranked, grounded → citations with page + snippet. Visibly better than Week 1.
+**End of Week 2 demo:** ✅ ask a question → answer streams in live → grounded → citations with page + score + snippet. Hybrid + rerank available behind flags. Visibly better than Week 1.
+
+> **Honest status:** rerank is code-complete but unverified live (no Cohere key); hybrid + streaming are verified live; the full browser streaming click-through hasn't been eyeballed. Defaults still ship hybrid/rerank **off** until RAGAS measures them.
 
 ---
 
