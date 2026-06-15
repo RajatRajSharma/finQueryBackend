@@ -30,11 +30,11 @@ pytest==8.3.4                            # fake-backed unit tests (no infra need
 # the resolver doesn't have to satisfy heavy eval deps yet.
 # ─────────────────────────────────────────────────────────────
 # --- Week 2: hybrid search + reranking + streaming ---
-# rank-bm25==0.2.2                       # BM25 sparse / keyword half of hybrid
-# llama-index-retrievers-bm25            # BM25 retriever integration
-# cohere==5.13.3                         # Cohere Rerank
+rank-bm25==0.2.2                         # BM25 sparse / keyword half of hybrid (Day 3)
+sse-starlette==2.1.3                     # SSE token streaming (Day 4); keep starlette <0.42 for fastapi
+# cohere==5.13.3                         # Cohere Rerank — install when ENABLE_RERANK=true (Day 2, gated off)
+# llama-index-retrievers-bm25            # not used — we call rank-bm25 directly to avoid llama-index churn
 # llama-index-postprocessor-cohere-rerank
-# sse-starlette==2.1.3                   # SSE token streaming
 #
 # --- Week 3: RAGAS evaluation ---
 # ragas==0.2.9

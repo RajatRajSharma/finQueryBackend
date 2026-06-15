@@ -15,6 +15,7 @@ from app.core.interfaces import (
     Embedder,
     LLMProvider,
     Reranker,
+    SparseRetriever,
     VectorStore,
 )
 
@@ -84,6 +85,9 @@ class FakeVectorStore(VectorStore):
     def search(self, embedding: list[float], top_k: int) -> list[SearchHit]:
         return [SearchHit(chunk=c, score=1.0) for c in self._chunks[:top_k]]
 
+    def all_chunks(self) -> list[Chunk]:
+        return list(self._chunks)
+
     def health_check(self) -> bool:
         return True
 
@@ -97,6 +101,29 @@ class FakeLLM(LLMProvider):
     def generate(self, prompt: str) -> str:
         self.last_prompt = prompt
         return "FAKE_ANSWER"
+
+    def generate_stream(self, prompt: str):
+        self.last_prompt = prompt
+        for token in ("FAKE", "_", "ANSWER"):
+            yield token
+
+
+class FakeSparseRetriever(SparseRetriever):
+    """Keyword retriever fake: returns pre-set hits, ignoring the real query.
+
+    Lets fusion be tested deterministically — you hand it the sparse side of the
+    result and assert how it combines with the dense side.
+    """
+
+    def __init__(self, hits: list[SearchHit] | None = None) -> None:
+        self._hits = hits or []
+        self.indexed: list[Chunk] = []
+
+    def index(self, chunks: list[Chunk]) -> None:
+        self.indexed = list(chunks)
+
+    def search(self, question: str, top_k: int) -> list[SearchHit]:
+        return self._hits[:top_k]
 
 
 class FakeReranker(Reranker):

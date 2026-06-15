@@ -110,3 +110,14 @@ class GeminiLLM(LLMProvider):
                 config=types.GenerateContentConfig(temperature=0.2),
             )
         return response.text or ""
+
+    def generate_stream(self, prompt: str) -> Iterator[str]:
+        with _translate_gemini_errors("streaming the answer"):
+            stream = self._client.models.generate_content_stream(
+                model=self._model,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.2),
+            )
+            for chunk in stream:
+                if chunk.text:
+                    yield chunk.text

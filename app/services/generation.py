@@ -12,6 +12,8 @@ faithfulness high and hallucinations low (measured later by RAGAS).
 
 from __future__ import annotations
 
+from typing import Iterator
+
 from app.core.domain import Chunk
 from app.core.interfaces import LLMProvider
 
@@ -50,3 +52,10 @@ class GenerationService:
     def generate_answer(self, question: str, contexts: list[Chunk]) -> str:
         prompt = build_prompt(question, contexts)
         return self._llm.generate(prompt)
+
+    def generate_answer_stream(
+        self, question: str, contexts: list[Chunk]
+    ) -> Iterator[str]:
+        """Stream the answer as text deltas (same prompt as generate_answer)."""
+        prompt = build_prompt(question, contexts)
+        yield from self._llm.generate_stream(prompt)

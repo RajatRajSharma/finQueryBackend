@@ -59,6 +59,39 @@ class QdrantVectorStore(VectorStore):
         self._client.upsert(collection_name=self._collection, points=points)
         return len(points)
 
+    def all_chunks(self) -> list[Chunk]:
+        """Scroll the whole collection, returning chunks (payload only, no vectors).
+
+        Used to build the BM25 keyword index. Pages through Qdrant in batches so
+        it works for a large collection; vectors are skipped to keep it light.
+        """
+        if not self._client.collection_exists(self._collection):
+            return []
+        chunks: list[Chunk] = []
+        offset = None
+        while True:
+            points, offset = self._client.scroll(
+                collection_name=self._collection,
+                limit=256,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            for point in points:
+                payload = point.payload or {}
+                chunks.append(
+                    Chunk(
+                        chunk_id=payload.get("chunk_id", str(point.id)),
+                        text=payload.get("text", ""),
+                        source_file=payload.get("source_file", ""),
+                        company=payload.get("company", ""),
+                        page_number=payload.get("page_number", 0),
+                    )
+                )
+            if offset is None:
+                break
+        return chunks
+
     def search(self, embedding: list[float], top_k: int) -> list[SearchHit]:
         result = self._client.query_points(
             collection_name=self._collection,

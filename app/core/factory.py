@@ -23,6 +23,7 @@ from app.core.interfaces import (
     Embedder,
     LLMProvider,
     Reranker,
+    SparseRetriever,
     VectorStore,
 )
 from app.processing.chunker import SentenceChunker
@@ -76,6 +77,24 @@ def get_reranker() -> Reranker | None:
 
 
 @lru_cache
+def get_sparse_retriever() -> SparseRetriever | None:
+    """The Week 2 BM25 keyword retriever, or None when hybrid is disabled.
+
+    Built once (lru_cache) and indexed from whatever is currently in the vector
+    store, so the keyword half reuses the same corpus as dense search. See the
+    freshness trade-off in bm25_index.py. When ENABLE_HYBRID is false this is
+    None and retrieval stays dense-only.
+    """
+    if not settings.ENABLE_HYBRID:
+        return None
+    from app.clients.bm25_index import Bm25Retriever
+
+    retriever = Bm25Retriever()
+    retriever.index(get_vector_store().all_chunks())
+    return retriever
+
+
+@lru_cache
 def get_vector_store() -> VectorStore:
     store = settings.VECTOR_STORE.lower()
     if store == "qdrant":
@@ -121,7 +140,9 @@ def get_retrieval_service() -> RetrievalService:
         vector_store=get_vector_store(),
         top_k=settings.TOP_K,
         reranker=get_reranker(),
+        sparse=get_sparse_retriever(),
         candidates=settings.RETRIEVE_CANDIDATES,
+        hybrid_alpha=settings.HYBRID_ALPHA,
     )
 
 

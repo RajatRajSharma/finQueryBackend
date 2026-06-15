@@ -23,15 +23,15 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 | `CHUNK_SIZE` | 512 | 256–1024 | tokens per chunk; bigger = more context, less precise | **70%** | eyeballed | sweep 256/512/768 under RAGAS |
 | `CHUNK_OVERLAP` | 50 | 0–128 | tokens shared across chunk boundaries (~10%) | **70%** | eyeballed | fine once size is fixed |
 | `TOP_K` | 5 | 3–8 | chunks fed to the LLM (final) | **70%** | eyeballed | 3 vs 5 vs 8 under RAGAS |
-| `RETRIEVE_CANDIDATES` | 20 | 10–50 | over-fetch pool before rerank (only used if rerank/hybrid on) | **50%** | untested | tune with rerank on |
-| `HYBRID_ALPHA` | 0.5 | 0.0–1.0 | dense↔sparse mix (1=dense only, 0=BM25 only) | **50%** | untested | sweep once hybrid is live |
+| `RETRIEVE_CANDIDATES` | 20 | 10–50 | over-fetch pool before fuse/rerank (used when hybrid/rerank on) | **55%** | eyeballed | now exercised by hybrid; sweep under RAGAS |
+| `HYBRID_ALPHA` | 0.5 | 0.0–1.0 | dense↔sparse mix (1=dense only, 0=BM25 only) | **55%** | eyeballed | hybrid live at 0.5; sweep 0.3–0.7 under RAGAS |
 
 ## Feature flags (target state vs current)
 
 | Var | Current | Target | Controls | Confidence current is best | Evidence | Next step |
 |---|---|---|---|---|---|---|
 | `ENABLE_RERANK` | false | **true** | Cohere rerank of candidates | **40%** (off = Week-1 quality) | untested | needs `COHERE_API_KEY` + `pip install cohere` |
-| `ENABLE_HYBRID` | false | **true** | dense + BM25 fusion | **40%** (off = dense only) | untested | needs BM25 deps (Day 3) |
+| `ENABLE_HYBRID` | false | **true** | dense + BM25 fusion | **45%** (off = dense only) | eyeballed | built + verified live (rank-bm25); flip on for demo, measure under RAGAS |
 
 ## Models & dimensions
 
@@ -61,3 +61,4 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 ## Changelog
 
 - **2026-06-16** — initial table. Week 2 Days 1–2 done (citations live; rerank code-complete, off). All retrieval values still pre-RAGAS (eyeballed/untested).
+- **2026-06-16** — Week 2 Days 3–4 done. Hybrid (dense+BM25) built + verified live; `HYBRID_ALPHA`/`RETRIEVE_CANDIDATES` now `eyeballed`. SSE streaming added (no new env knobs). Defaults still ship hybrid/rerank **off** until measured.

@@ -17,6 +17,7 @@ how to parse; an embedder only knows how to embed.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Iterator
 
 from app.core.domain import Chunk, ParsedPage, SearchHit
 
@@ -76,6 +77,15 @@ class VectorStore(ABC):
         ...
 
     @abstractmethod
+    def all_chunks(self) -> list[Chunk]:
+        """Return every stored chunk (text + metadata, no vectors needed).
+
+        Used to (re)build the Week 2 BM25 keyword index from what's already in
+        the store, so the sparse half doesn't need a second source of truth.
+        """
+        ...
+
+    @abstractmethod
     def health_check(self) -> bool:
         """True if the store is reachable — powers /health/ready."""
         ...
@@ -86,6 +96,16 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def generate(self, prompt: str) -> str:
+        ...
+
+    @abstractmethod
+    def generate_stream(self, prompt: str) -> Iterator[str]:
+        """Yield the answer incrementally as text deltas (Week 2 SSE streaming).
+
+        Same prompt contract as `generate`; the caller concatenates the deltas.
+        Kept separate from `generate` so evals/tests can use the simple one-shot
+        call while the API streams to the browser token-by-token.
+        """
         ...
 
 
@@ -102,4 +122,23 @@ class Reranker(ABC):
     def rerank(
         self, question: str, hits: list[SearchHit], top_n: int
     ) -> list[SearchHit]:
+        ...
+
+
+class SparseRetriever(ABC):
+    """Keyword/lexical retrieval (the BM25 half of hybrid search).
+
+    Complements dense vector search: BM25 nails exact terms — ticker symbols,
+    "Q4 2024", line-item names — that embeddings can blur. `index` (re)builds the
+    keyword index from a set of chunks; `search` returns the best `top_k` by
+    lexical score. Kept behind an interface so the implementation (rank-bm25
+    today) can be swapped without touching the query pipeline.
+    """
+
+    @abstractmethod
+    def index(self, chunks: list[Chunk]) -> None:
+        ...
+
+    @abstractmethod
+    def search(self, question: str, top_k: int) -> list[SearchHit]:
         ...

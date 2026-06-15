@@ -35,8 +35,7 @@ Ordered by **value ÷ risk** so the demo improves even if a hard item slips. Eac
 ## Pre-flight (Day 0 — ~1–2 hrs)
 
 - ⏳ Get a **Cohere API key** → `COHERE_API_KEY` in `.env` (https://dashboard.cohere.com/api-keys)
-- ⏳ Uncomment the **Week 2 deps** in [requirements.txt](../requirements.txt) and `pip install -r requirements.txt`:
-  `rank-bm25`, `llama-index-retrievers-bm25`, `cohere`, `llama-index-postprocessor-cohere-rerank`, `sse-starlette`
+- ✅ Installed the deps actually used — `rank-bm25` (BM25 direct, skipping the churny `llama-index-retrievers-bm25`) and `sse-starlette==2.1.3` (pinned to keep `starlette <0.42` for fastapi). `cohere` still optional, installed only when rerank is switched on.
 - ✅ Add Week 2 knobs to `config.py` + `.env.example`: `ENABLE_RERANK`, `RERANK_PROVIDER`, `RERANK_MODEL`, `RETRIEVE_CANDIDATES`, `ENABLE_HYBRID`, `HYBRID_ALPHA` (all default to the Week 1 behaviour)
 - ⏳ **De-risk spikes (~1 hr each, do before committing a full day):**
   - SSE: a throwaway token round-trip (backend `sse-starlette` → browser `ReadableStream`) to learn the real cost
@@ -75,32 +74,33 @@ Implements [§4.2 step 4](finQueryArchitecture.md). Take ~20 candidates and let 
 
 ---
 
-## Day 3 — Hybrid retrieval (dense + BM25 keyword)
+## Day 3 — Hybrid retrieval (dense + BM25 keyword)  ✅
 
-Adds the sparse half of [§4.2 step 3](finQueryArchitecture.md). Vector search nails *meaning*; BM25 nails *exact terms* ("Q4 2024", ticker symbols, line-item names). Fusing both catches what either misses. (Needs the Week 2 deps installed — do this as a deliberate step; LlamaIndex sub-packages are unpinned and can churn the resolve.)
+Adds the sparse half of [§4.2 step 3](finQueryArchitecture.md). Vector search nails *meaning*; BM25 nails *exact terms* ("Q4 2024", ticker symbols, line-item names). Fusing both catches what either misses. (Used `rank-bm25` directly to avoid the LlamaIndex BM25 package's version churn.)
 
-- ⏳ New interface `SparseRetriever` in `core/interfaces.py` — `search(question, k) -> list[SearchHit]`
-- ⏳ `clients/bm25_index.py` — wrap `llama-index-retrievers-bm25` / `rank-bm25` over the stored chunk text
-- ⏳ Decide **where BM25 lives** (write it in the docstring): rebuild from Qdrant payloads on startup/after ingest (simplest) vs persist. Note the trade-off.
-- ⏳ `services/retrieval.py` — `HybridRetriever`: dense + sparse, **fuse** (RRF or weighted by `HYBRID_ALPHA`) → `RETRIEVE_CANDIDATES`, then the Day-2 reranker
-- ⏳ `factory.py` — `get_sparse_retriever()`; assemble hybrid, gated by `ENABLE_HYBRID`
-- ⏳ Tests: fake sparse retriever; assert fusion ordering deterministically (no infra)
+- ✅ New interface `SparseRetriever` in `core/interfaces.py` — `index(chunks)` + `search(question, k)`; plus `VectorStore.all_chunks()` so BM25 reuses the corpus already in Qdrant
+- ✅ `clients/bm25_index.py` — `Bm25Retriever` over `rank-bm25`, in-memory, with a documented freshness trade-off (rebuild on restart; dense stays fresh for new uploads)
+- ✅ `services/retrieval.py` — `fuse()` does **min-max-normalised weighted fusion** by `HYBRID_ALPHA` (dense+sparse), → `RETRIEVE_CANDIDATES`, then the Day-2 reranker
+- ✅ `factory.py` — `get_sparse_retriever()` (built from `store.all_chunks()`, gated by `ENABLE_HYBRID`); assembled into `get_retrieval_service()`
+- ✅ Tests: `FakeSparseRetriever`; `fuse()` proves a chunk strong in *both* lists outranks one strong in dense only (pytest 9/9)
+- ✅ **Live-verified**: `ENABLE_HYBRID=true` on the real Apple corpus → correct cited answer with fused scores
 
-**End of day:** `/query` fuses dense + keyword candidates; `ENABLE_HYBRID=false` falls back to dense-only.
+**End of day:** ✅ `/query` fuses dense + keyword candidates; `ENABLE_HYBRID=false` falls back byte-for-byte to dense-only.
 
 ---
 
-## Day 4 — SSE token streaming
+## Day 4 — SSE token streaming  ✅
 
-Implements [§4.2 step 7](finQueryArchitecture.md). The answer "types out" live — the biggest *perceived* win, and the fiddliest item. Do the spike first.
+Implements [§4.2 step 7](finQueryArchitecture.md). The answer "types out" live — the biggest *perceived* win, and the fiddliest item.
 
-- ⏳ Extend `LLMProvider` with `generate_stream(prompt) -> Iterator[str]`; implement on `GeminiLLM` (keep non-streaming `generate()` for evals/tests)
-- ⏳ `services/generation.py` — `generate_answer_stream(question, contexts)` yielding deltas
-- ⏳ `routers/query.py` — add `POST /query/stream` (`text/event-stream` via `sse-starlette`): stream answer tokens, then a **final `citations` event**. Keep `POST /query` as the non-streaming path.
-- ⏳ Frontend `src/shared/api/` — streaming helper (fetch + `ReadableStream`) + `useStreamingQuery` hook
-- ⏳ Frontend `Chat.tsx` / `ChatArea` — append tokens to the assistant bubble live, attach citations on the final event
+- ✅ Extended `LLMProvider` with `generate_stream(prompt) -> Iterator[str]`; implemented on `GeminiLLM` (via `generate_content_stream`, same error translation) and `FakeLLM`; kept non-streaming `generate()` for evals/tests
+- ✅ `services/generation.py` — `generate_answer_stream(question, contexts)` yields deltas
+- ✅ `routers/query.py` — `POST /query/stream` via `sse-starlette`: `token` events, then a `citations` event, then `done`; mid-stream failures emit an `error` event. `POST /query` stays the one-shot path.
+- ✅ Frontend `src/shared/api/client.ts` — `askQuestionStream()` parses the SSE frames from a `fetch` `ReadableStream` (EventSource is GET-only); handles multi-line `data:` + keep-alive comments
+- ✅ Frontend `Chat.tsx` — appends tokens to the assistant bubble live (first token clears the "Searching…" placeholder), attaches citation chips on the `citations` event
+- ✅ **Live-verified** via curl: 5 `token` events → `citations` → `done`; frontend `build` + `lint` green
 
-**End of day:** ask in the browser and watch the answer stream token-by-token, citations at the end.
+**End of day:** ✅ answer streams token-by-token; citations appear at the end. (Browser click-through not yet eyeballed — backend SSE + client parser proven, UI wired + type-checks.)
 
 ---
 
