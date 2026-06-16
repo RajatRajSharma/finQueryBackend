@@ -210,9 +210,26 @@ So the API can change without disturbing the engine, and vice-versa.
 
 ## 6. Low-Level Design (LLD)
 
-### 6.1 The contracts (interfaces) — `core/interfaces.py`
+### 6.0 Which design model(s) are we following?
 
-Every swappable part is an abstract base class. Concrete vendors implement them; services depend on them.
+There isn't *one* model — a real system layers several, each solving a different problem at a different altitude. FinQuery is deliberate about this. The backbone is **Ports & Adapters (Hexagonal Architecture)**: the application core defines **ports** (abstract interfaces in `core/interfaces.py`), and the outside world plugs in as **adapters** (`clients/` for vendor SDKs, `processing/` for parsing/chunking). The core never imports a vendor; vendors depend inward on the core's contracts. On top of that we use a handful of classic patterns where they fit.
+
+| Concern / layer | Model / pattern followed | Where it lives |
+|---|---|---|
+| Whole system (HLD) | **Layered architecture** (frontend → backend → external services) | [finQueryArchitecture.md](docs/finQueryArchitecture.md) |
+| Backend core (LLD) | **Ports & Adapters (Hexagonal)** — ports = interfaces, adapters = vendor wrappers | `core/interfaces.py` ↔ `clients/`, `processing/` |
+| Choosing an implementation | **Strategy** + **Factory / Composition Root** (one place picks the vendor) | `core/factory.py` |
+| Dependency direction | **SOLID** — Dependency Inversion, Interface Segregation, Open/Closed | services depend only on interfaces |
+| Vendor isolation | **Adapter** pattern — one file per SDK, error translation at the boundary | `clients/gemini_client.py`, `clients/cohere_client.py`, … |
+| Optional features (rerank, hybrid) | **Feature-flag gating** — additive, fall back to the simpler path when off | `ENABLE_RERANK`, `ENABLE_HYBRID` in `config.py` |
+| Failure handling | **Centralized exception translation** (errors mapped to HTTP at one seam) | `core/errors.py` + handlers in `main.py` |
+| Frontend | **Feature-sliced architecture** (`features/`, `shared/`, `pages/`) | `finQueryFrontend/src/` |
+
+**Why multiple models is correct, not messy:** each operates at a different scope and they compose cleanly — Hexagonal decides *where* a dependency may point, SOLID/DIP enforces *which way the arrow goes*, Strategy+Factory decides *which concrete class* is chosen at runtime, and feature flags decide *whether an optional stage runs at all*. The payoff is the recurring theme below: **every capability is swappable or toggleable by editing one file, with the rest of the system untouched.**
+
+### 6.1 The contracts (ports) — `core/interfaces.py`
+
+Every swappable part is an abstract base class (a **port**). Concrete vendors (**adapters**) implement them; services depend only on the abstraction. Week 2 added two new ports (`Reranker`, `SparseRetriever`) and two methods (`LLMProvider.generate_stream`, `VectorStore.all_chunks`) — note that *adding* them touched no existing service.
 
 ```mermaid
 classDiagram
@@ -235,11 +252,22 @@ classDiagram
         +ensure_collection(dim)
         +upsert(chunks) int
         +search(emb, k) list~SearchHit~
+        +all_chunks() list~Chunk~
         +health_check() bool
     }
     class LLMProvider {
         <<abstract>>
         +generate(prompt) str
+        +generate_stream(prompt) Iterator~str~
+    }
+    class Reranker {
+        <<abstract>>
+        +rerank(question, hits, top_n) list~SearchHit~
+    }
+    class SparseRetriever {
+        <<abstract>>
+        +index(chunks)
+        +search(question, k) list~SearchHit~
     }
 
     DocumentParser <|.. PyPdfParser : pypdf
@@ -247,9 +275,15 @@ classDiagram
     Embedder <|.. GeminiEmbedder : google-genai
     VectorStore <|.. QdrantVectorStore : qdrant-client
     LLMProvider <|.. GeminiLLM : google-genai
+    Reranker <|.. CohereReranker : cohere
+    SparseRetriever <|.. Bm25Retriever : rank-bm25
 ```
 
+> Interfaces are kept **small** (Interface Segregation): a parser only parses, a reranker only reranks. That's why a new vendor implements one tiny contract, not a god-object.
+
 ### 6.2 How services depend ONLY on abstractions (Dependency Inversion)
+
+The query-side services gained optional collaborators in Week 2 — `RetrievalService` can now take a `Reranker` and a `SparseRetriever`, and `GenerationService` can stream — but the **dependency direction is unchanged**: arrows still point at interfaces, never at Gemini/Qdrant/Cohere.
 
 ```mermaid
 classDiagram
@@ -263,12 +297,15 @@ classDiagram
     class RetrievalService {
         -embedder: Embedder
         -store: VectorStore
-        -top_k: int
+        -reranker: Reranker?
+        -sparse: SparseRetriever?
+        -top_k, candidates, hybrid_alpha
         +retrieve(question, top_k) list~SearchHit~
     }
     class GenerationService {
         -llm: LLMProvider
         +generate_answer(question, contexts) str
+        +generate_answer_stream(question, contexts) Iterator~str~
     }
     IngestionService --> DocumentParser
     IngestionService --> Chunker
@@ -276,12 +313,39 @@ classDiagram
     IngestionService --> VectorStore
     RetrievalService --> Embedder
     RetrievalService --> VectorStore
+    RetrievalService ..> Reranker : optional
+    RetrievalService ..> SparseRetriever : optional
     GenerationService --> LLMProvider
 ```
 
-> Note the arrows point at **interfaces**, never at Gemini/Qdrant. The concrete classes are injected at runtime by the factory.
+> The `?` / dashed arrows are the **optional, flag-gated** Week 2 collaborators. When `ENABLE_RERANK` / `ENABLE_HYBRID` are off, the factory injects `None` and `retrieve()` is byte-for-byte the Week 1 dense path — additive design, zero regression risk.
 
-### 6.3 The composition root — `core/factory.py` (the ONE swap point)
+### 6.3 The assembled query pipeline (hybrid → rerank → stream)
+
+The full Week 2 retrieval path lives in `services/retrieval.py`, and every stage is optional:
+
+```mermaid
+flowchart LR
+    Q[question] --> E[embed_query]
+    E --> D[dense search<br/>Qdrant top-N]
+    Q --> S[BM25 search<br/>top-N]
+    D --> F{ENABLE_HYBRID?}
+    S --> F
+    F -- yes --> FU[fuse<br/>weighted by HYBRID_ALPHA]
+    F -- no --> D2[dense only]
+    FU --> R{ENABLE_RERANK?}
+    D2 --> R
+    R -- yes --> RR[Cohere rerank<br/>→ top_k]
+    R -- no --> TK[take top_k]
+    RR --> OUT[SearchHits]
+    TK --> OUT
+```
+
+- **Fusion** (`fuse()`): dense (cosine) and sparse (BM25) scores live on different scales, so each list is **min-max normalised** to `[0,1]`, then combined `alpha·dense + (1−alpha)·sparse` and deduped by `chunk_id`. `HYBRID_ALPHA=1.0` ⇒ dense only, `0.0` ⇒ BM25 only.
+- **BM25 index** (`clients/bm25_index.py`): built in-memory from `VectorStore.all_chunks()`, so the keyword half reuses the corpus already in Qdrant rather than a second source of truth (freshness trade-off documented in the file).
+- **Streaming** (`POST /query/stream`): `GenerationService.generate_answer_stream()` yields deltas from `LLMProvider.generate_stream()`; the router wraps them as SSE `token` events, then a `citations` event, then `done` (and an `error` event if generation fails mid-stream).
+
+### 6.4 The composition root — `core/factory.py` (the ONE swap point)
 
 ```python
 @lru_cache
@@ -291,24 +355,31 @@ def get_embedder() -> Embedder:
     # elif settings.EMBED_PROVIDER == "openai":
     #     return OpenAIEmbedder(...)          # <-- adding OpenAI = these 2 lines
     raise ValueError(...)
+
+@lru_cache
+def get_reranker() -> Reranker | None:
+    if not settings.ENABLE_RERANK:
+        return None                           # feature off → retrieval stays dense
+    from app.clients.cohere_client import CohereReranker   # lazy: SDK only when on
+    return CohereReranker(settings.COHERE_API_KEY, settings.RERANK_MODEL)
 ```
-`get_llm()`, `get_vector_store()`, `get_parser()`, `get_chunker()` follow the same shape, and
-`get_ingestion_service()` / `get_retrieval_service()` / `get_generation_service()` assemble the
-services and are used directly as FastAPI `Depends(...)`.
 
-**To switch embeddings Gemini → OpenAI:** write `OpenAIEmbedder(Embedder)` in `clients/openai_client.py`, uncomment one `elif`, set `EMBED_PROVIDER=openai` in `.env`. Done. Nothing else changes.
+`get_llm()`, `get_vector_store()`, `get_parser()`, `get_chunker()`, `get_sparse_retriever()` follow the same shape; `get_ingestion_service()` / `get_retrieval_service()` / `get_generation_service()` assemble the services and are used directly as FastAPI `Depends(...)`. Two patterns worth calling out:
 
-### 6.4 Error handling
+- **Lazy adapter import** — `get_reranker()` / `get_sparse_retriever()` only import the optional SDK (`cohere`, `rank-bm25`) *inside* the enabled branch, so a disabled feature isn't even a runtime dependency.
+- **`@lru_cache` = process-wide singletons** — one Qdrant connection / one Gemini client reused across requests, not rebuilt per call.
 
-`GeminiEmbedder`/`GeminiLLM` raise `ConfigurationError` when the key is missing. A single
-`@app.exception_handler(ConfigurationError)` in `main.py` turns it into a clean **HTTP 503** — even
-when it's raised during dependency construction (before the endpoint body runs).
+**To switch embeddings Gemini → OpenAI:** write `OpenAIEmbedder(Embedder)` in `clients/openai_client.py`, uncomment one `elif`, set `EMBED_PROVIDER=openai`. Done. Same recipe swaps the vector store, reranker, or LLM.
 
-Transient **vendor** failures get the same treatment: the Gemini SDK's `APIError` (overload /
-rate-limit / 5xx — e.g. `gemini-2.5-flash` returning *"experiencing high demand"*) is translated
-to `UpstreamServiceError` in `gemini_client.py` and surfaced as a clean **HTTP 503** with a "retry
-shortly" message — never a raw 500. The frontend's `ApiError` carries the status so the UI can show
-that message in the chat instead of crashing.
+### 6.5 Error handling — translation at the adapter boundary
+
+Failures are converted to intent-revealing domain errors at the vendor seam, then mapped to HTTP **once** by exception handlers in `main.py` (so no router needs a `try/except`):
+
+- **`ConfigurationError`** — a vendor adapter raises it when a key is missing (e.g. `GeminiEmbedder`, `CohereReranker`). → **HTTP 503**, even when raised during dependency construction *before* the endpoint body runs.
+- **`UpstreamServiceError`** — transient vendor failures (overload / rate-limit / 5xx) are caught in the adapter and re-raised as this. Both `gemini_client.py` and `cohere_client.py` use the same `_translate_*_errors` context manager. → **HTTP 503** with a "retry shortly" message, never a raw 500. *(Seen live: Gemini's `gemini-2.5-flash` "experiencing high demand" 503 and the free-tier embed 429 both surfaced cleanly.)*
+- **Mid-stream** — on `POST /query/stream`, a failure after tokens have started is emitted as an SSE **`error` event**, so the UI shows a message instead of a silently truncated answer.
+
+The frontend's `ApiError` carries the HTTP status, so the chat renders the backend's `{detail}` message rather than crashing.
 
 ---
 
@@ -334,13 +405,27 @@ flowchart TD
 flowchart TD
     A[POST /query<br/>routers/query.py] --> B[RetrievalService.retrieve]
     B --> B1[GeminiEmbedder.embed_query]
-    B1 --> B2[QdrantVectorStore.search<br/>top-k SearchHits]
+    B1 --> B2[retrieve: dense + optional BM25 fuse<br/>+ optional Cohere rerank → top_k<br/>see §6.3]
     B2 --> C[GenerationService.generate_answer]
     C --> C1[build_prompt<br/>question + chunks + grounding rule]
     C1 --> C2[GeminiLLM.generate<br/>gemini-2.5-flash]
-    B2 --> D[build_citations<br/>source file + page + snippet]
+    B2 --> D[build_citations<br/>source file + page + snippet + score]
     C2 --> E[QueryResponse]
     D --> E[answer + citations]
+```
+
+### 7.3 Streaming variant — `POST /query/stream` (SSE)
+
+Same retrieval, but the answer is streamed token-by-token so the UI "types out" live.
+
+```mermaid
+flowchart TD
+    A[POST /query/stream] --> B[RetrievalService.retrieve<br/>same as §7.2]
+    B --> G[generate_answer_stream<br/>GeminiLLM.generate_stream]
+    G --> T[SSE: token events<br/>one per delta]
+    T --> CI[SSE: citations event]
+    CI --> DN[SSE: done]
+    G -. on failure .-> ER[SSE: error event]
 ```
 
 ---
