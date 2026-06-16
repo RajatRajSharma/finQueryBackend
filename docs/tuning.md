@@ -24,7 +24,7 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 | `CHUNK_OVERLAP` | 50 | 0–128 | tokens shared across chunk boundaries (~10%) | **70%** | eyeballed | fine once size is fixed |
 | `TOP_K` | 5 | 3–8 | chunks fed to the LLM (final) | **70%** | eyeballed | 3 vs 5 vs 8 under RAGAS |
 | `RETRIEVE_CANDIDATES` | 20 | 10–50 | over-fetch pool before fuse/rerank (used when hybrid/rerank on) | **55%** | eyeballed | now exercised by hybrid; sweep under RAGAS |
-| `HYBRID_ALPHA` | 0.5 | 0.0–1.0 | dense↔sparse mix (1=dense only, 0=BM25 only) | **55%** | eyeballed | hybrid live at 0.5; sweep 0.3–0.7 under RAGAS |
+| `HYBRID_ALPHA` | 0.5 | 0.5–0.7 | dense↔sparse mix (1=dense only, 0=BM25 only) | **65%** | eyeballed | swept 0.3/0.5/0.7: <0.5 demotes best semantic page; keep 0.5. RAGAS sweep next |
 
 ## Feature flags (target state vs current)
 
@@ -59,7 +59,7 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 
 ## Overall setup validation
 
-**~68%** — solid Week-1 baseline (dense retrieval eyeballed-good on real 10-Ks), but the two biggest quality levers (rerank, hybrid) are built-but-off and **unmeasured**. Expect this to jump once Week 3 RAGAS lets us replace `eyeballed`/`untested` with real numbers and actually sweep `CHUNK_SIZE` / `TOP_K` / `HYBRID_ALPHA`.
+**~72%** — solid Week-1 baseline, and now a **first real RAGAS data point** (dense, 1 question: faithfulness 1.0, answerRelevancy 0.89, contextPrecision 0.89, contextRecall 1.0 — see [tuning-runs.md](tuning-runs.md)). Still partial: scored only 1–2 questions (free-tier per-minute cap), rerank unmeasured (no Cohere key), and no full per-config RAGAS sweep yet. Multi-key rotation removed the *daily* wall; a paid key would remove the per-minute one and let us score the full 12-question set + sweep `CHUNK_SIZE`/`TOP_K`/`HYBRID_ALPHA`.
 
 ## Changelog
 
@@ -68,3 +68,4 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 - **2026-06-16** — Week 2 Day 5 done. Logged a dense-vs-hybrid retrieval comparison in [tuning-runs.md](tuning-runs.md) (hybrid sharpens top-hit toward keyword pages, no regression). Rigorous `CHUNK_SIZE`/`TOP_K`/`HYBRID_ALPHA` sweep deferred to Week 3 RAGAS.
 - **2026-06-16** — Week 3 Days 1–2 done. Added `ENABLE_AGENT` (router: docs/clarify/web) and `ENABLE_WEB_SEARCH` (DuckDuckGo). Both off by default. Heads-up: with the agent on, each query costs an extra Gemini *generate* call — easy to hit the free-tier 20/min generation cap.
 - **2026-06-16** — Week 3 Day 3 (RAGAS) built + wired (`GET /evals`, judge on Gemini). Single-record scoring verified live; multi-question full runs hit the 20/min cap and return NaNs (`EVAL_SAMPLE_SIZE` added, default 2). NOTE: ragas 0.2.9 forced a pinned **langchain 0.3.x** stack — don't bump langchain to 1.x. Faithfulness metric on Gemini needs a prompt fix (returns 0/NaN).
+- **2026-06-16** — Added multi-key rotation (`GEMINI_API_KEY_2/_3` + `GeminiKeyPool`, 1→2→3 on 429). Unblocked the daily cap → **first real RAGAS scores landed** (sample=1). Also swept `HYBRID_ALPHA` (keep 0.5). Day-4 eval dashboard wired to live `GET /evals`.

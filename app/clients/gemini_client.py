@@ -1,20 +1,22 @@
 """Gemini clients — the ONLY file that imports the google-genai SDK.
 
-Holds both Gemini-backed implementations:
+Holds:
+  - GeminiKeyPool  — rotates across multiple API keys on quota exhaustion
   - GeminiEmbedder -> Embedder      (embeds text)
   - GeminiLLM      -> LLMProvider   (generates answers)
 
+Multiple free-tier keys each have their OWN per-project quota, so the pool tries
+key 1 until it's rate/quota-limited (HTTP 429), then key 2, then 3, … and only
+gives up (clean HTTP 503) when every key is exhausted. All Gemini SDK calls go
+through the pool, so the rotation is shared across embedding + generation.
+
 To add OpenAI, create app/clients/openai_client.py with sibling classes and
 register them in app/core/factory.py — nothing else in the codebase changes.
-
-Document vs query embeddings use different task types (RETRIEVAL_DOCUMENT vs
-RETRIEVAL_QUERY); Gemini uses that hint to place them in a compatible space.
 """
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import Iterator
+from typing import Callable, Iterator, TypeVar
 
 from google import genai
 from google.genai import errors as genai_errors
@@ -26,31 +28,62 @@ from app.core.interfaces import Embedder, LLMProvider
 # Gemini caps how many inputs one embed call accepts; batch under it.
 _MAX_BATCH = 100
 
+T = TypeVar("T")
 
-@contextmanager
-def _translate_gemini_errors(action: str) -> Iterator[None]:
-    """Turn google-genai SDK failures into a clean UpstreamServiceError.
 
-    The SDK raises APIError (and subclasses ServerError/ClientError) on overload,
-    rate limits, and 5xx responses. Left unhandled these bubble up as a raw HTTP
-    500; translating them lets the app-level handler return a clear 503 instead.
+class GeminiKeyPool:
+    """A rotating pool of Gemini API keys, shared by the embedder + LLM.
+
+    `run()` executes an SDK call against the current key; on a 429 (rate/quota
+    exhausted) it advances to the next key and retries, and only raises once all
+    keys are spent. The index only moves forward, so a key that's hit its daily
+    cap isn't retried on every later call.
     """
-    try:
-        yield
-    except genai_errors.APIError as exc:
+
+    def __init__(self, keys: list[str]) -> None:
+        if not keys:
+            raise ConfigurationError(
+                "No Gemini API key set - add GEMINI_API_KEY (and optionally "
+                "GEMINI_API_KEY_2 / _3) to .env."
+            )
+        self._keys = keys
+        self._clients: dict[int, genai.Client] = {}
+        self._idx = 0
+
+    @property
+    def key_count(self) -> int:
+        return len(self._keys)
+
+    def _client(self, i: int) -> genai.Client:
+        if i not in self._clients:
+            self._clients[i] = genai.Client(api_key=self._keys[i])
+        return self._clients[i]
+
+    def run(self, action: str, call: Callable[[genai.Client], T]) -> T:
+        """Run `call(client)` with key rotation on quota (429); translate other
+        failures to UpstreamServiceError (-> HTTP 503)."""
+        last_exc: Exception | None = None
+        for i in range(self._idx, len(self._keys)):
+            self._idx = i
+            try:
+                return call(self._client(i))
+            except genai_errors.APIError as exc:
+                if exc.code == 429:  # rate/quota exhausted on this key -> try the next
+                    last_exc = exc
+                    continue
+                raise UpstreamServiceError(
+                    f"Gemini failed while {action} (code {exc.code}): {exc.message}. "
+                    "This is usually transient — please retry shortly."
+                ) from exc
         raise UpstreamServiceError(
-            f"Gemini failed while {action} (code {exc.code}): {exc.message}. "
-            "This is usually transient — please retry shortly."
-        ) from exc
+            f"All {len(self._keys)} Gemini key(s) are quota-exhausted while {action}. "
+            "Add another GEMINI_API_KEY_n or wait for the daily reset."
+        ) from last_exc
 
 
 class GeminiEmbedder(Embedder):
-    def __init__(self, api_key: str, model: str, dimension: int) -> None:
-        if not api_key:
-            raise ConfigurationError(
-                "GEMINI_API_KEY is empty - set it in .env before ingesting."
-            )
-        self._client = genai.Client(api_key=api_key)
+    def __init__(self, pool: GeminiKeyPool, model: str, dimension: int) -> None:
+        self._pool = pool
         self._model = model
         self._dimension = dimension
 
@@ -62,28 +95,32 @@ class GeminiEmbedder(Embedder):
         vectors: list[list[float]] = []
         for start in range(0, len(texts), _MAX_BATCH):
             batch = texts[start : start + _MAX_BATCH]
-            with _translate_gemini_errors("embedding documents"):
-                response = self._client.models.embed_content(
+            response = self._pool.run(
+                "embedding documents",
+                lambda c, b=batch: c.models.embed_content(
                     model=self._model,
-                    contents=batch,
+                    contents=b,
                     config=types.EmbedContentConfig(
                         task_type="RETRIEVAL_DOCUMENT",
                         output_dimensionality=self._dimension,
                     ),
-                )
+                ),
+            )
             vectors.extend(e.values for e in response.embeddings)
         return vectors
 
     def embed_query(self, text: str) -> list[float]:
-        with _translate_gemini_errors("embedding the query"):
-            response = self._client.models.embed_content(
+        response = self._pool.run(
+            "embedding the query",
+            lambda c: c.models.embed_content(
                 model=self._model,
                 contents=text,
                 config=types.EmbedContentConfig(
                     task_type="RETRIEVAL_QUERY",
                     output_dimensionality=self._dimension,
                 ),
-            )
+            ),
+        )
         return response.embeddings[0].values
 
 
@@ -94,30 +131,30 @@ class GeminiLLM(LLMProvider):
     to stick to the retrieved context, not get creative.
     """
 
-    def __init__(self, api_key: str, model: str) -> None:
-        if not api_key:
-            raise ConfigurationError(
-                "GEMINI_API_KEY is empty - set it in .env before querying."
-            )
-        self._client = genai.Client(api_key=api_key)
+    def __init__(self, pool: GeminiKeyPool, model: str) -> None:
+        self._pool = pool
         self._model = model
 
     def generate(self, prompt: str) -> str:
-        with _translate_gemini_errors("generating the answer"):
-            response = self._client.models.generate_content(
+        response = self._pool.run(
+            "generating the answer",
+            lambda c: c.models.generate_content(
                 model=self._model,
                 contents=prompt,
                 config=types.GenerateContentConfig(temperature=0.2),
-            )
+            ),
+        )
         return response.text or ""
 
     def generate_stream(self, prompt: str) -> Iterator[str]:
-        with _translate_gemini_errors("streaming the answer"):
-            stream = self._client.models.generate_content_stream(
+        stream = self._pool.run(
+            "streaming the answer",
+            lambda c: c.models.generate_content_stream(
                 model=self._model,
                 contents=prompt,
                 config=types.GenerateContentConfig(temperature=0.2),
-            )
-            for chunk in stream:
-                if chunk.text:
-                    yield chunk.text
+            ),
+        )
+        for chunk in stream:
+            if chunk.text:
+                yield chunk.text

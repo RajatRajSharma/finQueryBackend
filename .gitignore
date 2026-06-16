@@ -12,8 +12,9 @@ __pycache__/
 
 # --- Data (raw PDFs ARE committed) ---
 # The eval question SET is committed (it's the test fixture); only cached run
-# results stay local.
+# results + the saved baseline stay local.
 data/eval/results.json
+data/eval/baseline.json
 
 # --- Qdrant local storage (if mounted) ---
 qdrant_storage/

@@ -60,6 +60,19 @@ class QueryResponse(BaseModel):
 
 
 class EvalResponse(BaseModel):
-    metrics: dict[str, float]        # averaged RAGAS scores, e.g. {"faithfulness": 0.93}
-    per_question: list[dict]         # one row per test question with its scores
-    num_questions: int
+    """UI-facing evaluation result (camelCase to match the frontend).
+
+    `metrics`/`baseline` are camelCase metric maps (faithfulness, answerRelevancy,
+    contextPrecision, contextRecall). `questions` rows mix per-question scores
+    with answer/groundTruth/retrievedContexts. `stale`/`running` let the UI decide
+    whether to trigger a fresh run."""
+
+    runId: str
+    createdAt: str
+    questionCount: int
+    metrics: dict[str, float]
+    config: dict
+    questions: list[dict]
+    baseline: dict | None = None
+    stale: bool = False              # cached run older than the TTL window
+    running: bool = False            # a fresh run is currently in progress

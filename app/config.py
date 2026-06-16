@@ -24,6 +24,10 @@ class Settings(BaseSettings):
 
     # --- API keys (fill in .env — empty for now) ---
     GEMINI_API_KEY: str = ""        # embeddings + generation (Week 1)
+    # Extra free-tier keys (each its own project quota). The pool rotates
+    # 1 -> 2 -> 3 on quota exhaustion; leave blank if you only have one.
+    GEMINI_API_KEY_2: str = ""
+    GEMINI_API_KEY_3: str = ""
     OPENAI_API_KEY: str = ""        # only if you switch *_PROVIDER to openai
     COHERE_API_KEY: str = ""        # reranking (Week 2 — leave empty for now)
 
@@ -75,9 +79,21 @@ class Settings(BaseSettings):
     EVAL_LLM_RPM: int = 12
     EVAL_MAX_WORKERS: int = 1
     EVAL_TIMEOUT: int = 300                     # per-job timeout (s); generous for serial + backoff
+    # A real run is slow + quota-heavy, so GET /evals serves the last cached run
+    # for this long before it's considered stale. 48h = 2 days; set 24, 1, etc.
+    EVAL_CACHE_TTL_HOURS: float = 48.0
+    EVAL_BASELINE_PATH: str = "data/eval/baseline.json"  # saved reference run for before/after
 
     # --- CORS: which frontend origin may call this API ---
     FRONTEND_ORIGIN: str = "http://localhost:5173"
+
+    def gemini_api_keys(self) -> list[str]:
+        """Non-empty Gemini keys in rotation order (1 -> 2 -> 3)."""
+        return [
+            k
+            for k in (self.GEMINI_API_KEY, self.GEMINI_API_KEY_2, self.GEMINI_API_KEY_3)
+            if k.strip()
+        ]
 
 
 # Singleton imported across the app.

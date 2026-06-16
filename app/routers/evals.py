@@ -1,14 +1,18 @@
-"""Evals router — GET /evals (RAGAS quality scores).
+"""Evals router — RAGAS quality scores for the dashboard.
 
-Thin HTTP layer over EvaluationService. By default returns the last cached run
-(instant, no API spend); pass ?run=true to execute a fresh evaluation through
-the live pipeline. The heavy lifting (running questions + RAGAS scoring) lives
-in the service; this router never imports ragas.
+  - GET  /evals       → the last cached run (instant), with `stale`/`running`
+                        flags so the UI knows whether to trigger a refresh.
+  - POST /evals/run   → kick off a fresh evaluation in the BACKGROUND (a real run
+                        is slow + quota-heavy), optionally saving it as the baseline.
+
+A full run is throttled to the Gemini free-tier limit and can take minutes, so it
+never blocks the request — the UI polls GET /evals until `running` clears. The
+heavy lifting lives in EvaluationService; this router never imports ragas.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.core.factory import get_evaluation_service
 from app.models.schemas import EvalResponse
@@ -16,22 +20,54 @@ from app.services.evaluation import EvaluationService
 
 router = APIRouter(tags=["evaluation"])
 
+# Single-flight guard: at most one background eval at a time (single-instance demo).
+_run_state = {"running": False}
 
-@router.get("/evals", response_model=EvalResponse)
-def evals(
-    run: bool = False,
-    service: EvaluationService = Depends(get_evaluation_service),
-) -> EvalResponse:
-    """Return RAGAS scores. `run=false` (default) serves the cached last run;
-    `run=true` executes a fresh evaluation (slow + uses API quota)."""
-    report = service.run() if run else service.cached()
-    if report is None:
+
+def _to_response(service: EvaluationService) -> EvalResponse:
+    run = service.cached()
+    if run is None:
         raise HTTPException(
             status_code=404,
-            detail="No cached evaluation yet. Call GET /evals?run=true to generate one.",
+            detail="No evaluation yet. POST /evals/run to generate one.",
         )
     return EvalResponse(
-        metrics=report.metrics,
-        per_question=report.per_question,
-        num_questions=report.num_questions,
+        runId=run.run_id,
+        createdAt=run.created_at,
+        questionCount=run.question_count,
+        metrics=run.metrics,
+        config=run.config,
+        questions=run.questions,
+        baseline=run.baseline,
+        stale=not service.is_fresh(run),
+        running=_run_state["running"],
     )
+
+
+@router.get("/evals", response_model=EvalResponse)
+def evals(service: EvaluationService = Depends(get_evaluation_service)) -> EvalResponse:
+    """Return the last cached evaluation (fast). `stale=true` means it's older
+    than the TTL — the UI can POST /evals/run to refresh."""
+    return _to_response(service)
+
+
+@router.post("/evals/run", status_code=202)
+def evals_run(
+    background_tasks: BackgroundTasks,
+    as_baseline: bool = False,
+    service: EvaluationService = Depends(get_evaluation_service),
+) -> dict:
+    """Trigger a fresh evaluation in the background. 409 if one is already running.
+    `as_baseline=true` saves the run as the reference for before/after."""
+    if _run_state["running"]:
+        raise HTTPException(status_code=409, detail="An evaluation is already running.")
+
+    def _job() -> None:
+        try:
+            service.run(as_baseline=as_baseline)
+        finally:
+            _run_state["running"] = False
+
+    _run_state["running"] = True
+    background_tasks.add_task(_job)
+    return {"status": "started", "asBaseline": as_baseline}

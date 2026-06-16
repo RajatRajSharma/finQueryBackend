@@ -90,14 +90,32 @@ class EvalRecord:
 
     question: str
     answer: str                 # the pipeline's answer
-    contexts: list[str]         # the retrieved chunk texts the answer was grounded in
+    contexts: list[str]         # the retrieved chunk texts (what RAGAS scores against)
     ground_truth: str           # hand-written correct answer
+    sources: list[dict] = field(default_factory=list)  # {doc, page, snippet} for display
 
 
 @dataclass
 class EvalReport:
-    """Aggregated evaluation output, returned by GET /evals."""
+    """Raw evaluator output: averaged metrics + per-question metric scores."""
 
     metrics: dict[str, float]            # averaged scores, e.g. {"faithfulness": 0.93, ...}
     per_question: list[dict]             # one row per question: its metrics (+ the question)
     num_questions: int
+
+
+@dataclass
+class EvalRun:
+    """The full, UI-facing evaluation result (cached + returned by GET /evals).
+
+    Built by EvaluationService by merging the evaluator's scores with each
+    record's answer/ground-truth/sources, plus run metadata, the pipeline config
+    used, and an optional baseline to show the before/after improvement."""
+
+    run_id: str
+    created_at: str                      # ISO-8601 UTC
+    question_count: int
+    metrics: dict[str, float]            # camelCase, e.g. {"faithfulness": .94, "answerRelevancy": .91}
+    config: dict                         # {model, embeddingModel, reranker, hybrid, topK}
+    questions: list[dict]                # per-question: scores + answer + groundTruth + retrievedContexts
+    baseline: dict | None = None         # camelCase metrics of the saved reference run, if any

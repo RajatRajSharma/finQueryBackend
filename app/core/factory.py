@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from app.clients.gemini_client import GeminiEmbedder, GeminiLLM
+from app.clients.gemini_client import GeminiEmbedder, GeminiKeyPool, GeminiLLM
 from app.clients.qdrant_client import QdrantVectorStore
 from app.config import settings
 from app.core.interfaces import (
@@ -38,11 +38,18 @@ from app.services.retrieval import RetrievalService
 
 
 @lru_cache
+def get_gemini_pool() -> GeminiKeyPool:
+    """One shared, rotating Gemini key pool (1 -> 2 -> 3 on quota) for the whole
+    process, so embedding + generation draw from and rotate the same keys."""
+    return GeminiKeyPool(settings.gemini_api_keys())
+
+
+@lru_cache
 def get_embedder() -> Embedder:
     provider = settings.EMBED_PROVIDER.lower()
     if provider == "gemini":
         return GeminiEmbedder(
-            api_key=settings.GEMINI_API_KEY,
+            pool=get_gemini_pool(),
             model=settings.EMBED_MODEL,
             dimension=settings.EMBED_DIM,
         )
@@ -56,7 +63,7 @@ def get_embedder() -> Embedder:
 def get_llm() -> LLMProvider:
     provider = settings.LLM_PROVIDER.lower()
     if provider == "gemini":
-        return GeminiLLM(api_key=settings.GEMINI_API_KEY, model=settings.LLM_MODEL)
+        return GeminiLLM(pool=get_gemini_pool(), model=settings.LLM_MODEL)
     # if provider == "openai":
     #     from app.clients.openai_client import OpenAILLM
     #     return OpenAILLM(settings.OPENAI_API_KEY, settings.LLM_MODEL)
@@ -193,7 +200,7 @@ def get_evaluator() -> Evaluator:
         from app.clients.ragas_evaluator import RagasEvaluator
 
         return RagasEvaluator(
-            api_key=settings.GEMINI_API_KEY,
+            keys=settings.gemini_api_keys(),
             llm_model=settings.LLM_MODEL,
             embed_model=settings.EMBED_MODEL,
             llm_rpm=settings.EVAL_LLM_RPM,
@@ -211,5 +218,14 @@ def get_evaluation_service() -> EvaluationService:
         evaluator=get_evaluator(),
         questions_path=settings.EVAL_QUESTIONS_PATH,
         results_path=settings.EVAL_RESULTS_PATH,
+        baseline_path=settings.EVAL_BASELINE_PATH,
+        run_config={
+            "model": settings.LLM_MODEL,
+            "embeddingModel": settings.EMBED_MODEL,
+            "reranker": settings.ENABLE_RERANK,
+            "hybrid": settings.ENABLE_HYBRID,
+            "topK": settings.TOP_K,
+        },
+        ttl_hours=settings.EVAL_CACHE_TTL_HOURS,
         sample_size=settings.EVAL_SAMPLE_SIZE,
     )

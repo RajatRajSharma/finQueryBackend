@@ -37,7 +37,7 @@ Everything in the code is just implementing one of those steps.
 
 > **Week 2 (done):** BM25 hybrid retrieval (dense + keyword, fused), Cohere reranking (built, gated behind `ENABLE_RERANK`), SSE token streaming (`POST /query/stream`), and richer citations (snippet + score) in the UI. All additive and flag-gated — defaults reproduce Week 1.
 >
-> **Week 3 (in progress):** an **agent router** (`agent.py` → docs/clarify/web, gated by `ENABLE_AGENT`), a **web-search fallback** (`websearch_client.py`, DuckDuckGo, opt-in), and **RAGAS evaluation** (`evaluation.py` + `GET /evals`, judge on Gemini). All previously-stub files (`agent.py`, `evaluation.py`, `evals.py`, `cohere_client.py`) are now implemented. RAGAS full-run scoring is rate-limited on the Gemini free tier — see [w3Plan.md](docs/w3Plan.md).
+> **Week 3 (in progress):** an **agent router** (`agent.py` → docs/clarify/web, gated by `ENABLE_AGENT`), a **web-search fallback** (`websearch_client.py`, DuckDuckGo, opt-in), and **RAGAS evaluation** (`evaluation.py` + `GET /evals`, judge on Gemini). All previously-stub files (`agent.py`, `evaluation.py`, `evals.py`, `cohere_client.py`) are now implemented. RAGAS full-run scoring is rate-limited on the Gemini free tier — see [executionPlan.md](docs/executionPlan.md).
 
 ---
 
@@ -119,7 +119,8 @@ first — it's dev-only, not a runtime dependency).
 | `POST` | http://localhost:8000/upload | Ingest a PDF (parse→chunk→embed→store) | key + Qdrant |
 | `POST` | http://localhost:8000/query | Ask a question → cited answer | key + Qdrant |
 | `POST` | http://localhost:8000/query/stream | Ask a question → answer streamed token-by-token (SSE), then a citations event | key + Qdrant |
-| `GET` | http://localhost:8000/evals | RAGAS scores (cached); `?run=true` runs a fresh eval | key + Qdrant + eval deps |
+| `GET` | http://localhost:8000/evals | Last cached RAGAS run (camelCase: metrics, baseline, config, per-question + sources) with `stale`/`running` flags | — (serves cache) |
+| `POST` | http://localhost:8000/evals/run | Kick off a fresh eval in the background (`?as_baseline=true` saves the reference run) | key + Qdrant + eval deps |
 | `GET` | http://localhost:8000/docs | Swagger UI | — |
 
 ### Examples

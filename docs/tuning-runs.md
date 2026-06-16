@@ -49,3 +49,32 @@ Goal: get a clean RAGAS score under the Gemini free tier. Each trial = config se
 **Faithfulness quirk:** RAGAS faithfulness returned 0.0/NaN on Gemini even for a directly-supported answer — its statement-extraction prompt parses poorly on non-OpenAI judges. Fix later via a custom prompt or alternate metric; relevancy + precision look sane.
 
 **To get a real run tomorrow:** `EVAL_SAMPLE_SIZE=2 EVAL_LLM_RPM=10 EVAL_MAX_WORKERS=1` → `GET /evals?run=true`. Bump sample only if it stays green.
+
+---
+
+## Run 2026-06-16 — FIRST real RAGAS scores ✅ (multi-key rotation unblocked it)
+
+Added a 2nd Gemini key + a rotating `GeminiKeyPool` (1→2→3 on quota). Key 1 was daily-exhausted; rotation rolled to key 2. Then `EVAL_SAMPLE_SIZE=1`, `EVAL_LLM_RPM=8`, fresh-minute idle → squeaked under the per-minute 20-cap.
+
+**Config:** dense-only (rerank off, hybrid off), `TOP_K=5`, Gemini judge. **1 question** (Apple net sales).
+
+| Metric | Score |
+|---|---|
+| faithfulness | **1.00** |
+| answerRelevancy | **0.889** |
+| contextPrecision | **0.888** |
+| contextRecall | **1.00** |
+
+**Reads:** real, sensible numbers — and faithfulness scored **1.0** here (the earlier 0.0 was the single-record/parse quirk, not a systemic break). Cached + served live by `GET /evals` in camelCase; the dashboard renders it. **Daily exhaustion is now solved by rotation; the per-minute cap still limits batch size → score 1–2 questions at a time (or use a paid key for the full 12).**
+
+## Run 2026-06-16 — HYBRID_ALPHA sweep (embed-once, quota-light)
+
+Top-5 pages by alpha (1.0=dense only, 0.0=BM25 only):
+
+| Question | dense | a=0.3 | a=0.5 | a=0.7 |
+|---|---|---|---|---|
+| total net sales | p9,p4,p18 | **p17**,p9,p18 | p9,p17,p18 | p9,p4,p18 |
+| tariffs/trade risk | p17,p27,p26 | p17,p27,p24 | p17,p27,p24 | p17,p27,p24 |
+| share repurchase | p13,p13,p21 | p13,p27,p21 | p13,p27,p21 | p13,p27,p21 |
+
+**Read:** `a=0.3` over-weights BM25 and demotes the best semantic page (net-sales p9 falls below keyword p17); `a=0.5–0.7` keep the right dense top-hit while still surfacing keyword pages (p17/p27). **Keep `HYBRID_ALPHA=0.5` (don't go below 0.5 for this corpus).** A rigorous pick needs per-alpha RAGAS context-precision (future, quota permitting).
