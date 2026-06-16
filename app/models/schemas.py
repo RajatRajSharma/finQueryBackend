@@ -43,6 +43,23 @@ class Citation(BaseModel):
     score: float
 
 
+class WebSource(BaseModel):
+    title: str
+    url: str
+    snippet: str
+
+
 class QueryResponse(BaseModel):
     answer: str
     citations: list[Citation]
+    # Week 3 (agent): which route handled this — "answer_from_docs" | "clarify"
+    # | "web_search". None when the agent is disabled. Additive: existing
+    # clients ignore it.
+    route: str | None = None
+    web_sources: list[WebSource] | None = None  # populated only on the web_search route
+
+
+class EvalResponse(BaseModel):
+    metrics: dict[str, float]        # averaged RAGAS scores, e.g. {"faithfulness": 0.93}
+    per_question: list[dict]         # one row per test question with its scores
+    num_questions: int

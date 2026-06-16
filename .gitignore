@@ -10,8 +10,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
-# --- Data (raw PDFs ARE committed; eval JSON kept local) ---
-data/eval/*.json
+# --- Data (raw PDFs ARE committed) ---
+# The eval question SET is committed (it's the test fixture); only cached run
+# results stay local.
+data/eval/results.json
 
 # --- Qdrant local storage (if mounted) ---
 qdrant_storage/

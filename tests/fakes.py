@@ -8,15 +8,26 @@ Gemini + Qdrant in production run here with these fakes in a millisecond.
 
 from __future__ import annotations
 
-from app.core.domain import Chunk, ParsedPage, SearchHit
+from app.core.domain import (
+    Chunk,
+    EvalRecord,
+    EvalReport,
+    ParsedPage,
+    RouteDecision,
+    SearchHit,
+    WebResult,
+)
 from app.core.interfaces import (
     Chunker,
     DocumentParser,
     Embedder,
+    Evaluator,
     LLMProvider,
+    QueryRouter,
     Reranker,
     SparseRetriever,
     VectorStore,
+    WebSearchTool,
 )
 
 
@@ -106,6 +117,45 @@ class FakeLLM(LLMProvider):
         self.last_prompt = prompt
         for token in ("FAKE", "_", "ANSWER"):
             yield token
+
+
+class FakeEvaluator(Evaluator):
+    """Scores deterministically (no LLM): records what it was given, returns
+    flat 1.0s. Lets the EvaluationService + /evals be tested with no ragas/API."""
+
+    def __init__(self) -> None:
+        self.seen: list[EvalRecord] = []
+
+    def evaluate(self, records: list[EvalRecord]) -> EvalReport:
+        self.seen = records
+        per_q = [
+            {"question": r.question, "faithfulness": 1.0, "answer_relevancy": 1.0}
+            for r in records
+        ]
+        metrics = {"faithfulness": 1.0, "answer_relevancy": 1.0} if records else {}
+        return EvalReport(metrics=metrics, per_question=per_q, num_questions=len(records))
+
+
+class FakeQueryRouter(QueryRouter):
+    """Returns a preset RouteDecision so tests can force each agent branch."""
+
+    def __init__(self, decision: RouteDecision) -> None:
+        self._decision = decision
+
+    def route(self, question: str) -> RouteDecision:
+        return self._decision
+
+
+class FakeWebSearchTool(WebSearchTool):
+    """Returns canned web results, no network."""
+
+    def __init__(self, results: list[WebResult] | None = None) -> None:
+        self._results = results or []
+        self.last_query: str | None = None
+
+    def search(self, query: str) -> list[WebResult]:
+        self.last_query = query
+        return self._results
 
 
 class FakeSparseRetriever(SparseRetriever):

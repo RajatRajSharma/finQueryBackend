@@ -52,3 +52,52 @@ class IngestionResult:
     pages_parsed: int
     chunks_created: int
     chunks_stored: int
+
+
+# --- Week 3: agentic routing ---
+
+# The three ways the agent can handle a question (see services/agent.py).
+ROUTE_ANSWER = "answer_from_docs"   # answer from the uploaded reports (the default)
+ROUTE_CLARIFY = "clarify"           # too vague — ask the user a follow-up
+ROUTE_WEB = "web_search"            # not in the docs — fall back to web search
+
+
+@dataclass(frozen=True)
+class RouteDecision:
+    """The agent router's verdict on how to handle a question."""
+
+    route: str                       # one of the ROUTE_* constants above
+    clarification: str | None = None  # a follow-up question when route == clarify
+    reason: str | None = None         # short rationale (useful for debugging/logging)
+
+
+@dataclass(frozen=True)
+class WebResult:
+    """One result from the web-search fallback tool (Week 3)."""
+
+    title: str
+    url: str
+    snippet: str
+
+
+# --- Week 3: RAGAS evaluation ---
+
+
+@dataclass
+class EvalRecord:
+    """One graded sample: a test question, what the pipeline produced for it,
+    and the known-correct answer. Fed to the Evaluator (RAGAS)."""
+
+    question: str
+    answer: str                 # the pipeline's answer
+    contexts: list[str]         # the retrieved chunk texts the answer was grounded in
+    ground_truth: str           # hand-written correct answer
+
+
+@dataclass
+class EvalReport:
+    """Aggregated evaluation output, returned by GET /evals."""
+
+    metrics: dict[str, float]            # averaged scores, e.g. {"faithfulness": 0.93, ...}
+    per_question: list[dict]             # one row per question: its metrics (+ the question)
+    num_questions: int

@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.core.errors import ConfigurationError, UpstreamServiceError
-from app.routers import health, query, upload
+from app.routers import evals, health, query, upload
 
 app = FastAPI(title="FinQuery API", version="0.1.0")
 
@@ -45,7 +45,8 @@ async def _upstream_service_error_handler(
     is momentarily unavailable (overload/rate-limit/timeout). Clients can retry."""
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
-# Mount routers. The evals router gets added in Week 3.
+# Mount routers.
 app.include_router(health.router)
 app.include_router(upload.router)
 app.include_router(query.router)
+app.include_router(evals.router)   # Week 3: GET /evals (RAGAS scores)

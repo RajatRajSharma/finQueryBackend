@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from app.core.domain import Chunk
+from app.core.domain import Chunk, WebResult
 from app.core.interfaces import LLMProvider
 
 _SYSTEM_INSTRUCTION = (
@@ -45,6 +45,29 @@ def build_prompt(question: str, contexts: list[Chunk]) -> str:
     )
 
 
+_WEB_INSTRUCTION = (
+    "You are FinQuery. The user's question was NOT covered by the uploaded "
+    "annual reports, so answer using ONLY the web search results below. Begin "
+    "your answer with 'From the web:' to make clear this is not from the user's "
+    "documents. Be concise and cite the source titles you used."
+)
+
+
+def build_web_prompt(question: str, results: list[WebResult]) -> str:
+    """Assemble a prompt grounded in web-search results (the agent fallback)."""
+    if results:
+        blocks = [f"[{i}] {r.title} ({r.url})\n{r.snippet}" for i, r in enumerate(results, 1)]
+        context_text = "\n\n".join(blocks)
+    else:
+        context_text = "(no web results were found)"
+    return (
+        f"{_WEB_INSTRUCTION}\n\n"
+        f"--- WEB RESULTS ---\n{context_text}\n\n"
+        f"--- QUESTION ---\n{question}\n\n"
+        f"--- ANSWER ---\n"
+    )
+
+
 class GenerationService:
     def __init__(self, llm: LLMProvider) -> None:
         self._llm = llm
@@ -59,3 +82,12 @@ class GenerationService:
         """Stream the answer as text deltas (same prompt as generate_answer)."""
         prompt = build_prompt(question, contexts)
         yield from self._llm.generate_stream(prompt)
+
+    def generate_web_answer(self, question: str, results: list[WebResult]) -> str:
+        """Answer from web-search results (the agent's web_search fallback)."""
+        return self._llm.generate(build_web_prompt(question, results))
+
+    def generate_web_answer_stream(
+        self, question: str, results: list[WebResult]
+    ) -> Iterator[str]:
+        yield from self._llm.generate_stream(build_web_prompt(question, results))

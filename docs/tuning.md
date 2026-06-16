@@ -32,6 +32,9 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 |---|---|---|---|---|---|---|
 | `ENABLE_RERANK` | false | **true** | Cohere rerank of candidates | **40%** (off = Week-1 quality) | untested | needs `COHERE_API_KEY` + `pip install cohere` |
 | `ENABLE_HYBRID` | false | **true** | dense + BM25 fusion | **45%** (off = dense only) | eyeballed | built + verified live (rank-bm25); flip on for demo, measure under RAGAS |
+| `ENABLE_AGENT` | false | demo: **true** | route docs/clarify/web before retrieving | **50%** (off = Week 2 pipeline) | eyeballed | live-verified docs+clarify; adds 1 Gemini generate/query (quota cost) |
+| `ENABLE_WEB_SEARCH` | false | opt-in | web fallback when not in docs | **60%** (off = no external dep) | eyeballed | DuckDuckGo tool live; keep off unless needed (free-tier gen quota) |
+| `EVAL_SAMPLE_SIZE` | 2 | small | how many questions /evals scores | **70%** | eyeballed | RAGAS ~3 judge calls/Q; >a few hits the 20/min cap → NaN scores |
 
 ## Models & dimensions
 
@@ -63,3 +66,5 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 - **2026-06-16** — initial table. Week 2 Days 1–2 done (citations live; rerank code-complete, off). All retrieval values still pre-RAGAS (eyeballed/untested).
 - **2026-06-16** — Week 2 Days 3–4 done. Hybrid (dense+BM25) built + verified live; `HYBRID_ALPHA`/`RETRIEVE_CANDIDATES` now `eyeballed`. SSE streaming added (no new env knobs). Defaults still ship hybrid/rerank **off** until measured.
 - **2026-06-16** — Week 2 Day 5 done. Logged a dense-vs-hybrid retrieval comparison in [tuning-runs.md](tuning-runs.md) (hybrid sharpens top-hit toward keyword pages, no regression). Rigorous `CHUNK_SIZE`/`TOP_K`/`HYBRID_ALPHA` sweep deferred to Week 3 RAGAS.
+- **2026-06-16** — Week 3 Days 1–2 done. Added `ENABLE_AGENT` (router: docs/clarify/web) and `ENABLE_WEB_SEARCH` (DuckDuckGo). Both off by default. Heads-up: with the agent on, each query costs an extra Gemini *generate* call — easy to hit the free-tier 20/min generation cap.
+- **2026-06-16** — Week 3 Day 3 (RAGAS) built + wired (`GET /evals`, judge on Gemini). Single-record scoring verified live; multi-question full runs hit the 20/min cap and return NaNs (`EVAL_SAMPLE_SIZE` added, default 2). NOTE: ragas 0.2.9 forced a pinned **langchain 0.3.x** stack — don't bump langchain to 1.x. Faithfulness metric on Gemini needs a prompt fix (returns 0/NaN).

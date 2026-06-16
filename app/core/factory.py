@@ -21,14 +21,18 @@ from app.core.interfaces import (
     Chunker,
     DocumentParser,
     Embedder,
+    Evaluator,
     LLMProvider,
+    QueryRouter,
     Reranker,
     SparseRetriever,
     VectorStore,
+    WebSearchTool,
 )
 from app.processing.chunker import SentenceChunker
 from app.processing.pdf_parser import PyPdfParser
 from app.services.generation import GenerationService
+from app.services.evaluation import EvaluationService
 from app.services.ingestion import IngestionService
 from app.services.retrieval import RetrievalService
 
@@ -57,6 +61,33 @@ def get_llm() -> LLMProvider:
     #     from app.clients.openai_client import OpenAILLM
     #     return OpenAILLM(settings.OPENAI_API_KEY, settings.LLM_MODEL)
     raise ValueError(f"Unsupported LLM_PROVIDER: {settings.LLM_PROVIDER!r}")
+
+
+@lru_cache
+def get_query_router() -> QueryRouter | None:
+    """The Week 3 agent router, or None when ENABLE_AGENT is off (then /query is
+    the Week 2 pipeline). Reuses the existing LLM — no new vendor/key."""
+    if not settings.ENABLE_AGENT:
+        return None
+    from app.services.agent import LLMQueryRouter
+
+    return LLMQueryRouter(llm=get_llm())
+
+
+@lru_cache
+def get_web_search_tool() -> WebSearchTool | None:
+    """The Week 3 web-search fallback, or None when ENABLE_WEB_SEARCH is off.
+
+    Lazy-imports the provider SDK only when enabled, so `ddgs`/Tavily aren't hard
+    dependencies of the normal path."""
+    if not settings.ENABLE_WEB_SEARCH:
+        return None
+    provider = settings.WEB_SEARCH_PROVIDER.lower()
+    if provider == "duckduckgo":
+        from app.clients.websearch_client import DuckDuckGoSearch
+
+        return DuckDuckGoSearch(max_results=settings.WEB_SEARCH_MAX_RESULTS)
+    raise ValueError(f"Unsupported WEB_SEARCH_PROVIDER: {settings.WEB_SEARCH_PROVIDER!r}")
 
 
 @lru_cache
@@ -149,3 +180,36 @@ def get_retrieval_service() -> RetrievalService:
 def get_generation_service() -> GenerationService:
     """Assemble the generation step (LLM provider)."""
     return GenerationService(llm=get_llm())
+
+
+@lru_cache
+def get_evaluator() -> Evaluator:
+    """The Week 3 RAGAS evaluator.
+
+    Lazy-imports ragas only here, so it (and its heavy deps) aren't required for
+    the normal app — only when /evals is actually called."""
+    provider = settings.EVAL_PROVIDER.lower()
+    if provider == "ragas":
+        from app.clients.ragas_evaluator import RagasEvaluator
+
+        return RagasEvaluator(
+            api_key=settings.GEMINI_API_KEY,
+            llm_model=settings.LLM_MODEL,
+            embed_model=settings.EMBED_MODEL,
+            llm_rpm=settings.EVAL_LLM_RPM,
+            max_workers=settings.EVAL_MAX_WORKERS,
+            timeout=settings.EVAL_TIMEOUT,
+        )
+    raise ValueError(f"Unsupported EVAL_PROVIDER: {settings.EVAL_PROVIDER!r}")
+
+
+def get_evaluation_service() -> EvaluationService:
+    """Assemble the evaluation runner (pipeline + evaluator + question set)."""
+    return EvaluationService(
+        retrieval=get_retrieval_service(),
+        generation=get_generation_service(),
+        evaluator=get_evaluator(),
+        questions_path=settings.EVAL_QUESTIONS_PATH,
+        results_path=settings.EVAL_RESULTS_PATH,
+        sample_size=settings.EVAL_SAMPLE_SIZE,
+    )

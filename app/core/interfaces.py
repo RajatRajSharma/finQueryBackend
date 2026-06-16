@@ -19,7 +19,15 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Iterator
 
-from app.core.domain import Chunk, ParsedPage, SearchHit
+from app.core.domain import (
+    Chunk,
+    EvalRecord,
+    EvalReport,
+    ParsedPage,
+    RouteDecision,
+    SearchHit,
+    WebResult,
+)
 
 
 class DocumentParser(ABC):
@@ -141,4 +149,45 @@ class SparseRetriever(ABC):
 
     @abstractmethod
     def search(self, question: str, top_k: int) -> list[SearchHit]:
+        ...
+
+
+class QueryRouter(ABC):
+    """The agentic layer: decides HOW to handle a question before retrieving.
+
+    Returns a RouteDecision — answer from the documents, ask the user to
+    clarify, or fall back to web search. This is what makes the system "agentic
+    RAG" rather than a fixed pipeline. Vendor-agnostic like the rest: the LLM
+    implementation lives in services/agent.py behind this port.
+    """
+
+    @abstractmethod
+    def route(self, question: str) -> RouteDecision:
+        ...
+
+
+class WebSearchTool(ABC):
+    """External web search — the agent's fallback when a question isn't covered
+    by the uploaded reports (e.g. post-filing news, current prices).
+
+    Kept behind a port so the provider (DuckDuckGo, Tavily, …) can be swapped,
+    and so it's opt-in: the core demo never depends on an external search key.
+    """
+
+    @abstractmethod
+    def search(self, query: str) -> list[WebResult]:
+        ...
+
+
+class Evaluator(ABC):
+    """Scores a batch of answered questions (Week 3 RAGAS evaluation).
+
+    Takes EvalRecords (question + pipeline answer + retrieved contexts +
+    ground truth) and returns an EvalReport of averaged quality metrics. Behind a
+    port so the scorer (RAGAS today, a fake in tests) is swappable and the
+    /evals endpoint never imports the eval library directly.
+    """
+
+    @abstractmethod
+    def evaluate(self, records: list[EvalRecord]) -> EvalReport:
         ...

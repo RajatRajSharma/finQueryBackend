@@ -37,7 +37,7 @@ Everything in the code is just implementing one of those steps.
 
 > **Week 2 (done):** BM25 hybrid retrieval (dense + keyword, fused), Cohere reranking (built, gated behind `ENABLE_RERANK`), SSE token streaming (`POST /query/stream`), and richer citations (snippet + score) in the UI. All additive and flag-gated — defaults reproduce Week 1.
 >
-> **Week 3 (next):** an agent router and RAGAS evaluation. Their stub files still exist (`agent.py`, `evaluation.py`, `evals.py`); `cohere_client.py` is now implemented.
+> **Week 3 (in progress):** an **agent router** (`agent.py` → docs/clarify/web, gated by `ENABLE_AGENT`), a **web-search fallback** (`websearch_client.py`, DuckDuckGo, opt-in), and **RAGAS evaluation** (`evaluation.py` + `GET /evals`, judge on Gemini). All previously-stub files (`agent.py`, `evaluation.py`, `evals.py`, `cohere_client.py`) are now implemented. RAGAS full-run scoring is rate-limited on the Gemini free tier — see [w3Plan.md](docs/w3Plan.md).
 
 ---
 
@@ -119,6 +119,7 @@ first — it's dev-only, not a runtime dependency).
 | `POST` | http://localhost:8000/upload | Ingest a PDF (parse→chunk→embed→store) | key + Qdrant |
 | `POST` | http://localhost:8000/query | Ask a question → cited answer | key + Qdrant |
 | `POST` | http://localhost:8000/query/stream | Ask a question → answer streamed token-by-token (SSE), then a citations event | key + Qdrant |
+| `GET` | http://localhost:8000/evals | RAGAS scores (cached); `?run=true` runs a fresh eval | key + Qdrant + eval deps |
 | `GET` | http://localhost:8000/docs | Swagger UI | — |
 
 ### Examples
@@ -484,6 +485,9 @@ flowchart TD
 | `ENABLE_RERANK` / `RERANK_PROVIDER` / `RERANK_MODEL` | `false` / `cohere` / `rerank-english-v3.0` | Week 2 Cohere rerank (needs `COHERE_API_KEY` + `pip install cohere`) |
 | `ENABLE_HYBRID` / `HYBRID_ALPHA` | `false` / `0.5` | Week 2 dense+BM25 fusion (`1.0`=dense only, `0.0`=BM25 only) |
 | `RETRIEVE_CANDIDATES` | `20` | over-fetch pool before fuse/rerank |
+| `ENABLE_AGENT` | `false` | Week 3 agent router (docs / clarify / web) |
+| `ENABLE_WEB_SEARCH` / `WEB_SEARCH_PROVIDER` | `false` / `duckduckgo` | Week 3 web fallback (opt-in, keyless) |
+| `EVAL_PROVIDER` / `EVAL_SAMPLE_SIZE` | `ragas` / `2` | Week 3 RAGAS eval; keep sample small on the free tier |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | CORS allow-list |
 
 > See [docs/tuning.md](docs/tuning.md) for current values + confidence, and [docs/tuning-runs.md](docs/tuning-runs.md) for logged dense-vs-hybrid runs.

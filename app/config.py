@@ -54,6 +54,28 @@ class Settings(BaseSettings):
     ENABLE_HYBRID: bool = False
     HYBRID_ALPHA: float = 0.5                   # 1.0 = dense only, 0.0 = sparse only
 
+    # --- Week 3: agentic routing + web-search fallback ---
+    # ENABLE_AGENT routes each question (answer_from_docs | clarify | web_search)
+    # before retrieving. Off by default so /query stays the Week 2 pipeline.
+    ENABLE_AGENT: bool = False
+    # Web search is opt-in (the core demo must not depend on an external key).
+    ENABLE_WEB_SEARCH: bool = False
+    WEB_SEARCH_PROVIDER: str = "duckduckgo"     # duckduckgo (keyless) | tavily
+    WEB_SEARCH_MAX_RESULTS: int = 5
+
+    # --- Week 3: RAGAS evaluation ---
+    EVAL_PROVIDER: str = "ragas"                # ragas | fake (fake = no LLM, for CI/demo)
+    EVAL_QUESTIONS_PATH: str = "data/eval/questions.json"
+    EVAL_RESULTS_PATH: str = "data/eval/results.json"   # cached last run (gitignored)
+    # Cap how many questions a run scores (0 = all). Keep small on the free tier.
+    EVAL_SAMPLE_SIZE: int = 0
+    # Throttle the RAGAS judge to live within the Gemini free-tier rate limit.
+    # EVAL_LLM_RPM = max judge calls/minute (keep < the 20/min generate cap);
+    # EVAL_MAX_WORKERS = 1 serializes jobs so they don't burst past the limit.
+    EVAL_LLM_RPM: int = 12
+    EVAL_MAX_WORKERS: int = 1
+    EVAL_TIMEOUT: int = 300                     # per-job timeout (s); generous for serial + backoff
+
     # --- CORS: which frontend origin may call this API ---
     FRONTEND_ORIGIN: str = "http://localhost:5173"
 

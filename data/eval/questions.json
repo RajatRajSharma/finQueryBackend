@@ -1,0 +1,50 @@
+[
+  {
+    "question": "What were Apple's total net sales for the three months ended March 28, 2026?",
+    "ground_truth": "Apple's total net sales for the three months ended March 28, 2026 were $111,184 million."
+  },
+  {
+    "question": "How did Apple's net sales split between Products and Services in the quarter?",
+    "ground_truth": "For the quarter, Products net sales were about $80,208 million and Services net sales were about $30,976 million."
+  },
+  {
+    "question": "What were Apple's total net sales for the six months ended March 28, 2026?",
+    "ground_truth": "Total net sales for the six months ended March 28, 2026 were $254,940 million."
+  },
+  {
+    "question": "Did Apple's Services revenue grow year over year?",
+    "ground_truth": "Yes, Services net sales increased compared with the same period of the prior year."
+  },
+  {
+    "question": "What legal or regulatory matters does Apple discuss relating to the Digital Markets Act?",
+    "ground_truth": "Apple discusses European Commission investigations under the EU Digital Markets Act (DMA), including a non-compliance investigation into App Store anti-steering / how developers communicate offers to users."
+  },
+  {
+    "question": "What risk does Apple describe related to tariffs and international trade?",
+    "ground_truth": "Apple describes risk from tariffs and trade measures, noting uncertainty about the magnitude and duration of tariffs and possible retaliatory measures that could affect its business and costs."
+  },
+  {
+    "question": "Does Apple pay dividends, and what is its stated approach?",
+    "ground_truth": "Yes, Apple pays a quarterly dividend and intends to increase its dividend on an annual basis, subject to declaration by the Board of Directors."
+  },
+  {
+    "question": "Does Apple have a share repurchase program?",
+    "ground_truth": "Yes, Apple has a share repurchase program under which it repurchases shares of its common stock."
+  },
+  {
+    "question": "How did iPhone net sales change year over year?",
+    "ground_truth": "iPhone net sales changed modestly year over year; the filing describes the change versus the prior-year periods."
+  },
+  {
+    "question": "How did Mac net sales perform in the second quarter of 2026?",
+    "ground_truth": "Mac net sales increased in the second quarter of 2026 compared with the second quarter of 2025, driven by higher laptop sales."
+  },
+  {
+    "question": "What was Apple's net income or how profitable was the quarter?",
+    "ground_truth": "Apple reported net income for the quarter, remaining solidly profitable; the exact figure is in the condensed consolidated statements of operations."
+  },
+  {
+    "question": "What currency or foreign-exchange risk does Apple mention?",
+    "ground_truth": "Apple notes that a portion of its revenue and costs are in currencies other than the U.S. dollar, so foreign-exchange fluctuations (e.g. a weaker yen) can affect reported net sales."
+  }
+]

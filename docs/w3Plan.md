@@ -20,57 +20,64 @@
 
 ## Pre-flight (Day 0 — ~1 hr)
 
-- ⏳ Uncomment the **Week 3 deps** in [requirements.txt](../requirements.txt) and install: `ragas`, `datasets`
-- ⏳ Decide the **web-search tool** for the agent fallback (e.g. Tavily / SerpAPI free tier, or DuckDuckGo) → add its key to `.env` + `.env.example`
-- ⏳ Add Week 3 knobs to `config.py`: `ENABLE_AGENT=true`, `ENABLE_WEB_SEARCH=false` (default off — opt-in), `EVAL_QUESTIONS_PATH=data/eval/questions.json`
-- ⏳ Confirm Weeks 1–2 still green (`pytest -q`, a live streamed + reranked query)
+- ✅ Installed the **Week 3 deps**: `ragas==0.2.9`, `datasets==3.2.0`, plus a **pinned langchain 0.3.x stack** + `langchain-google-genai` (RAGAS 0.2.9 breaks on langchain 1.x — see the requirements note). App still imports; pytest green.
+- ✅ Chose the **web-search tool**: keyless **DuckDuckGo** (`ddgs`) — no key needed (Day 2)
+- ✅ Added Week 3 knobs to `config.py` + `.env.example`: `ENABLE_AGENT`, `ENABLE_WEB_SEARCH`, `EVAL_PROVIDER`, `EVAL_QUESTIONS_PATH`, `EVAL_RESULTS_PATH`, `EVAL_SAMPLE_SIZE` (all default to off / safe)
+- ✅ Weeks 1–2 still green (pytest 15/15)
+- ✅ **RAGAS de-risk spike**: a 1-record RAGAS-on-Gemini run **works** (answer_relevancy 0.82, context_precision 1.0; faithfulness needs attention — see Day 3). Surfaced the langchain-version trap early, as intended.
 
 > **Free-tier quota reminder:** RAGAS grades with an **LLM judge**, so a 20-question eval = dozens of Gemini calls. Embeds are capped ~100/min — run evals once, not in a loop, and expect to pace runs. (See the project memory on the Gemini free-tier quota.)
 
 ---
 
-## Day 1 — Agent router (the "agentic" part)
+## Day 1 — Agent router (the "agentic" part)  ✅
 
 Implements [§4.2 step 2](finQueryArchitecture.md). Before retrieving, the agent classifies the question and picks a route — this is what lets the project honestly be called *agentic* RAG.
 
-- ⏳ New interface (e.g. `QueryRouter`) in `core/interfaces.py` — `route(question) -> RouteDecision` where the decision is one of `answer_from_docs | clarify | web_search`
-- ⏳ Fill the `services/agent.py` **stub** → an LLM-backed router: a small classification prompt over `LLMProvider` returning a structured decision (reuse the existing Gemini client; no new vendor)
-- ⏳ `routers/query.py` — run the router first:
-  - `answer_from_docs` → the normal Week 2 hybrid→rerank→generate path
-  - `clarify` → return a short clarifying question instead of an answer (new response shape / event)
-  - `web_search` → hand off to the Day 2 fallback tool
-- ⏳ `factory.py` — `get_query_router()`, gated by `ENABLE_AGENT` (off → behaves exactly like Week 2)
-- ⏳ Tests: fake router forcing each branch; assert the pipeline takes the right path (no infra)
+- ✅ New interface `QueryRouter` in `core/interfaces.py` — `route(question) -> RouteDecision` (`answer_from_docs | clarify | web_search`); `RouteDecision` added to `core/domain.py`
+- ✅ Filled the `services/agent.py` **stub** → `LLMQueryRouter`: a JSON-classification prompt over `LLMProvider` (reuses Gemini — no new vendor), robust parse, **safe fallback to `answer_from_docs`** on any error
+- ✅ `routers/query.py` — runs the router first on both `/query` and `/query/stream`:
+  - `answer_from_docs` → the Week 2 hybrid→rerank→generate path
+  - `clarify` → returns a one-line follow-up question (no retrieval)
+  - `web_search` → hands off to the Day 2 tool (falls back to docs if web is off)
+- ✅ `factory.py` — `get_query_router()` gated by `ENABLE_AGENT` (off → `None` → exactly Week 2); `schemas.QueryResponse` gained an additive `route` field
+- ✅ Tests: `FakeQueryRouter` + endpoint tests force each branch (pytest 14/14); router parse + fallback unit-tested
+- ✅ **Live-verified**: docs question → `answer_from_docs` (cited answer); "how did they do?" → `clarify` (asks which company/metric)
 
-**End of day:** the backend decides *how* to answer before answering; with `ENABLE_AGENT=false` it's the plain Week 2 pipeline.
+**End of day:** ✅ the backend decides *how* to answer before answering; `ENABLE_AGENT=false` is the plain Week 2 pipeline.
 
 ---
 
-## Day 2 — Web-search fallback tool
+## Day 2 — Web-search fallback tool  ✅ (live tool; end-to-end answer quota-blocked)
 
 Completes the agent: when a question isn't covered by the uploaded reports, fall back to web search instead of forcing a weak doc-grounded answer ([§3 external services / §4.2](finQueryArchitecture.md)).
 
-- ⏳ New interface `WebSearchTool` — `search(query) -> list[{title, url, snippet}]`
-- ⏳ `clients/websearch_client.py` — wrap the chosen provider; `ConfigurationError` on missing key, errors → `UpstreamServiceError` (mirror the Gemini/Cohere pattern)
-- ⏳ Wire the `web_search` branch: generate an answer from web snippets, clearly **labelled as web-sourced (not from the user's reports)** and cited with URLs
-- ⏳ Keep it **opt-in** (`ENABLE_WEB_SEARCH=false` by default) so the core demo never depends on an external search key
-- ⏳ Tests: fake web tool; assert web answers are labelled distinctly from doc answers
+- ✅ New interface `WebSearchTool` — `search(query) -> list[WebResult]`; `WebResult` in `core/domain.py`
+- ✅ `clients/websearch_client.py` — `DuckDuckGoSearch` via the **keyless `ddgs`** package (no API key needed), errors → `UpstreamServiceError` (mirrors the Gemini/Cohere pattern)
+- ✅ Wired the `web_search` branch: `generation.generate_web_answer()` builds a web-grounded prompt prefixed **"From the web:"** (clearly not from the user's reports); `QueryResponse.web_sources` returns the URLs
+- ✅ Kept **opt-in** (`ENABLE_WEB_SEARCH=false` default) so the core demo never depends on it; provider lazy-imported only when enabled
+- ✅ Tests: `FakeWebSearchTool` + endpoint test assert the web branch returns `web_sources` and calls the tool (pytest 14/14)
+- ✅ **Live-verified**: `DuckDuckGoSearch.search()` returns real results (no key)
+- ⏸ **End-to-end web *answer* live**: blocked by the Gemini free-tier generation cap (20/min) — the agent adds a classify call per query, so the budget runs out. Surfaces cleanly as a 503. Components all verified individually.
 
 **End of day:** out-of-corpus questions get an honest web-sourced answer (when enabled) rather than a hallucinated one.
 
 ---
 
-## Day 3 — RAGAS evaluation
+## Day 3 — RAGAS evaluation  ✅ (built + wired; full-run scores quota-limited)
 
-Implements the whole of [finQueryEvaluation.md](finQueryEvaluation.md) — the standout "I measured my RAG" feature.
+Implements the whole of [finQueryEvaluation.md](finQueryEvaluation.md) — the standout "I measured my RAG" feature. Built the project's way: an `Evaluator` port + `RagasEvaluator` adapter (lazy-imported) + `FakeEvaluator` for tests.
 
-- ⏳ Author `data/eval/questions.json` — ~20 `{question, ground_truth}` pairs across the corpus (Apple net sales, Tesla risks, etc.). `contexts` + `answer` are filled by running the pipeline.
-- ⏳ Fill the `services/evaluation.py` **stub** → `run_evaluation(records)` using `ragas.evaluate` with `faithfulness, answer_relevancy, context_precision` (point RAGAS's judge + embeddings at Gemini)
-- ⏳ Add a runner: for each test question, run the live query pipeline, capture `question / answer / contexts / ground_truth`, then score
-- ⏳ Fill the `routers/evals.py` **stub** → `GET /evals` returning averaged metrics (+ per-question rows); **mount it in `main.py`** (the Week 1 TODO comment marks the spot)
-- ⏳ Cache the last run's results (results file under `data/eval/`, gitignored) so `GET /evals` is fast and doesn't re-burn API calls on every request
+- ✅ Authored `data/eval/questions.json` — 12 `{question, ground_truth}` pairs (Apple 10-K; the committed test fixture — only cached `results.json` is gitignored)
+- ✅ New `Evaluator` interface + `EvalRecord`/`EvalReport` domain; filled `clients/ragas_evaluator.py` → `RagasEvaluator` using `ragas.evaluate` with `faithfulness, answer_relevancy, context_precision`, judge + embeddings pointed at **Gemini** (errors → `UpstreamServiceError`)
+- ✅ Filled `services/evaluation.py` → `EvaluationService`: for each question runs the **live pipeline** (retrieve → generate), captures `question/answer/contexts/ground_truth`, scores via the evaluator, **caches** to `EVAL_RESULTS_PATH`
+- ✅ Filled `routers/evals.py` → `GET /evals` (cached) / `GET /evals?run=true` (fresh); **mounted in `main.py`**; `EvalResponse` schema added
+- ✅ `factory.get_evaluator()` / `get_evaluation_service()`; `FakeEvaluator` + endpoint/service tests (pytest 15/15)
+- ✅ **Live-verified the flow end-to-end** (endpoint→service→pipeline→RAGAS→cache runs)
+- ⏸ **Meaningful full-run scores**: blocked by the Gemini free-tier **20 generates/min** — RAGAS fires ~3 judge jobs/question, so a multi-question run times out mid-eval and returns `NaN`s. Single-record scoring works (spike). Real numbers need a tiny `EVAL_SAMPLE_SIZE` + spaced retries, or paid quota.
+- ⚠️ **Faithfulness metric with Gemini** returned 0.0/NaN in places — a known RAGAS quirk where its statement-extraction prompt doesn't parse cleanly on non-OpenAI judges. Flag for tuning (custom prompt or a different metric impl).
 
-**End of day:** `GET /evals` returns real faithfulness / relevancy / precision scores for the current pipeline.
+**End of day:** `GET /evals` is wired and runs; trustworthy faithfulness/relevancy/precision numbers await more quota (and a faithfulness-prompt fix for Gemini).
 
 ---
 

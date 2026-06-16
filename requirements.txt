@@ -36,6 +36,17 @@ sse-starlette==2.1.3                     # SSE token streaming (Day 4); keep sta
 # llama-index-retrievers-bm25            # not used — we call rank-bm25 directly to avoid llama-index churn
 # llama-index-postprocessor-cohere-rerank
 #
-# --- Week 3: RAGAS evaluation ---
-# ragas==0.2.9
-# datasets==3.2.0
+# --- Week 3: agent web-search fallback (optional, gated by ENABLE_WEB_SEARCH) ---
+ddgs==9.6.0                              # keyless DuckDuckGo search; lazy-imported only when enabled
+
+# --- Week 3: RAGAS evaluation (heavy; only needed for GET /evals?run=true) ---
+# NOTE: ragas 0.2.9 needs the langchain 0.3.x line — newer langchain 1.x breaks
+# its imports (langchain_community.chat_models.vertexai). These pins are a
+# narrow, tested compatibility window; change them together, not individually.
+ragas==0.2.9
+datasets==3.2.0
+langchain==0.3.30
+langchain-core==0.3.86
+langchain-community==0.3.31
+langchain-openai==0.2.14                 # 0.2.x pairs with langchain-core 0.3.x
+langchain-google-genai==2.0.11           # points RAGAS's judge + embeddings at Gemini
