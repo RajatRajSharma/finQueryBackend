@@ -137,7 +137,9 @@ def get_vector_store() -> VectorStore:
     store = settings.VECTOR_STORE.lower()
     if store == "qdrant":
         return QdrantVectorStore(
-            url=settings.QDRANT_URL, collection=settings.QDRANT_COLLECTION
+            url=settings.QDRANT_URL,
+            collection=settings.QDRANT_COLLECTION,
+            api_key=settings.QDRANT_API_KEY,
         )
     raise ValueError(f"Unsupported VECTOR_STORE: {settings.VECTOR_STORE!r}")
 

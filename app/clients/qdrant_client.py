@@ -27,8 +27,10 @@ def _point_id(chunk_id: str) -> str:
 
 
 class QdrantVectorStore(VectorStore):
-    def __init__(self, url: str, collection: str) -> None:
-        self._client = QdrantClient(url=url)
+    def __init__(self, url: str, collection: str, api_key: str | None = None) -> None:
+        # api_key is None/empty for a local open instance, and set for an
+        # authenticated production cluster (e.g. Qdrant Cloud over HTTPS).
+        self._client = QdrantClient(url=url, api_key=api_key or None)
         self._collection = collection
 
     def ensure_collection(self, dimension: int) -> None:

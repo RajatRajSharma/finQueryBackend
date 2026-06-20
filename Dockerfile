@@ -25,8 +25,10 @@ USER appuser
 EXPOSE 8000
 
 # Liveness: hit /health with the stdlib (no curl needed in the slim image).
+# Honors $PORT (set by hosts like Render); falls back to 8000 locally.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"
+    CMD python -c "import os,urllib.request,sys; sys.exit(0 if urllib.request.urlopen(f\"http://localhost:{os.getenv('PORT','8000')}/health\").status==200 else 1)"
 
-# Container talks to the "qdrant" service, not localhost (see docker-compose.yml).
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form so $PORT expands. Hosts (Render/Cloud Run/Railway) inject $PORT and
+# route to it; locally/compose it's unset, so it falls back to 8000.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

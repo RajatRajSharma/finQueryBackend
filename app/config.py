@@ -32,8 +32,12 @@ class Settings(BaseSettings):
     COHERE_API_KEY: str = ""        # reranking (Week 2 — leave empty for now)
 
     # --- Qdrant vector DB ---
+    # Local dev: Dockerized Qdrant on localhost, no auth (key empty).
+    # Production: a Qdrant Cloud URL (https://...:6333) + its API key. The key
+    # is optional so the local open instance keeps working with an empty value.
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION: str = "finquery_chunks"
+    QDRANT_API_KEY: str = ""
 
     # --- Models + embedding dimension ---
     EMBED_MODEL: str = "gemini-embedding-001"  # Gemini embeddings (configurable dim)
