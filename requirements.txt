@@ -7,7 +7,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
-pydantic-settings==2.7.1
+pydantic-settings==2.14.1        # >=2.10.1 required by langchain-community (eval stack)
 python-dotenv==1.0.1
 python-multipart==0.0.20        # parses multipart/form-data for PDF uploads
 
