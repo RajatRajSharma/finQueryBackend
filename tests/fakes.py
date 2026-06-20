@@ -99,6 +99,14 @@ class FakeVectorStore(VectorStore):
     def all_chunks(self) -> list[Chunk]:
         return list(self._chunks)
 
+    def delete_except(self, source_files: list[str]) -> int:
+        if not source_files:
+            raise ValueError("delete_except needs a non-empty keep-list (refusing to wipe all).")
+        keep = set(source_files)
+        before = len(self._chunks)
+        self._chunks = [c for c in self._chunks if c.source_file in keep]
+        return before - len(self._chunks)
+
     def health_check(self) -> bool:
         return True
 

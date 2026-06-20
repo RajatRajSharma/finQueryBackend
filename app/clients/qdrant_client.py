@@ -15,7 +15,14 @@ from __future__ import annotations
 import uuid
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchAny,
+    PointStruct,
+    VectorParams,
+)
 
 from app.core.domain import Chunk, SearchHit
 from app.core.interfaces import VectorStore
@@ -117,6 +124,32 @@ class QdrantVectorStore(VectorStore):
                 )
             )
         return hits
+
+    def delete_except(self, source_files: list[str]) -> int:
+        """Delete points whose source_file is not in the keep-list.
+
+        Selects points where source_file does NOT match any keep entry
+        (`must_not` + MatchAny) and deletes them. Counts first so we can report
+        how many were removed. Guards against an empty keep-list, which would
+        otherwise match nothing in must_not and wipe the whole collection.
+        """
+        if not source_files:
+            raise ValueError("delete_except needs a non-empty keep-list (refusing to wipe all).")
+        if not self._client.collection_exists(self._collection):
+            return 0
+        purge_filter = Filter(
+            must_not=[
+                FieldCondition(key="source_file", match=MatchAny(any=source_files))
+            ]
+        )
+        to_delete = self._client.count(
+            collection_name=self._collection, count_filter=purge_filter, exact=True
+        ).count
+        if to_delete:
+            self._client.delete(
+                collection_name=self._collection, points_selector=purge_filter
+            )
+        return to_delete
 
     def health_check(self) -> bool:
         try:

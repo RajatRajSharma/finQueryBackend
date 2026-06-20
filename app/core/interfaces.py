@@ -94,6 +94,17 @@ class VectorStore(ABC):
         ...
 
     @abstractmethod
+    def delete_except(self, source_files: list[str]) -> int:
+        """Delete every chunk whose `source_file` is NOT in `source_files`.
+
+        Corpus-maintenance op: keep a canonical set of documents and purge
+        anything else (e.g. ad-hoc uploads). Returns how many points were
+        deleted. An empty keep-list would wipe the collection, so callers must
+        guard against that.
+        """
+        ...
+
+    @abstractmethod
     def health_check(self) -> bool:
         """True if the store is reachable — powers /health/ready."""
         ...
