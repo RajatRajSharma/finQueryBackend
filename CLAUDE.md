@@ -1,6 +1,6 @@
 # FinQuery backend — assistant guide
 
-Agentic RAG over company 10-Ks. Read [docs/finQueryArchitecture.md](docs/finQueryArchitecture.md) for the design and [docs/executionPlan.md](docs/executionPlan.md) for the combined 3-week plan + status.
+Agentic RAG over company 10-Ks. Read [docs/finQueryArchitecture.md](docs/finQueryArchitecture.md) for the design.
 
 ## Env & tuning log — keep it in sync
 

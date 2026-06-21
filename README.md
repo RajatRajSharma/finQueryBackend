@@ -37,7 +37,7 @@ Everything in the code is just implementing one of those steps.
 
 > **Week 2 (done):** BM25 hybrid retrieval (dense + keyword, fused), Cohere reranking (built, gated behind `ENABLE_RERANK`), SSE token streaming (`POST /query/stream`), and richer citations (snippet + score) in the UI. All additive and flag-gated — defaults reproduce Week 1.
 >
-> **Week 3 (in progress):** an **agent router** (`agent.py` → docs/clarify/web, gated by `ENABLE_AGENT`), a **web-search fallback** (`websearch_client.py`, DuckDuckGo, opt-in), and **RAGAS evaluation** (`evaluation.py` + `GET /evals`, judge on Gemini). All previously-stub files (`agent.py`, `evaluation.py`, `evals.py`, `cohere_client.py`) are now implemented. RAGAS full-run scoring is rate-limited on the Gemini free tier — see [executionPlan.md](docs/executionPlan.md).
+> **Week 3 (in progress):** an **agent router** (`agent.py` → docs/clarify/web, gated by `ENABLE_AGENT`), a **web-search fallback** (`websearch_client.py`, DuckDuckGo, opt-in), and **RAGAS evaluation** (`evaluation.py` + `GET /evals`, judge on Gemini). All previously-stub files (`agent.py`, `evaluation.py`, `evals.py`, `cohere_client.py`) are now implemented. RAGAS full-run scoring is rate-limited on the Gemini free tier — see [tuning.md](docs/tuning.md).
 
 ---
 

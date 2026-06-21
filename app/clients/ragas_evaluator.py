@@ -9,7 +9,7 @@ The judge + embeddings are pointed at **Gemini** (not RAGAS's default OpenAI) so
 the project stays single-vendor. Everything is lazy-imported and only constructed
 when EVAL_PROVIDER=ragas, so ragas isn't a hard dependency of the app.
 
-Caveat (documented in executionPlan): RAGAS makes several judge calls per question, so a
+Caveat (documented in docs/tuning.md): RAGAS makes several judge calls per question, so a
 full run easily exceeds the Gemini free-tier rate limits — keep EVAL_SAMPLE_SIZE
 small. Failures are translated to UpstreamServiceError -> HTTP 503.
 """
