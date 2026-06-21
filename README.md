@@ -368,3 +368,81 @@ flowchart LR
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | which web app may call the API (CORS) |
 
 > See [docs/tuning.md](docs/tuning.md) for current values + confidence levels, and [docs/tuning-runs.md](docs/tuning-runs.md) for logged retrieval comparisons.
+
+---
+
+## 12. Glossary (every keyword, in plain English)
+
+### Core idea
+
+- **RAG (Retrieval-Augmented Generation)** — instead of letting an AI answer from memory, you first *retrieve* the relevant text from your own documents and make the AI answer from that. Fewer made-up facts, with sources.
+- **LLM (Large Language Model)** — the AI that understands and writes text (here, Google Gemini). It writes the final answer.
+- **Grounding** — forcing the AI to answer **only** from the provided text, not its own memory. This is what prevents hallucinations.
+- **Hallucination** — when an AI confidently states something false. RAG + grounding exist to stop this.
+- **Citation** — the source (file + page) shown with each answer so you can verify it.
+
+### Turning documents into searchable data
+
+- **Token** — a piece of a word the AI counts in (~¾ of a word). "512 tokens" ≈ 350–400 words.
+- **Chunk / chunking** — cutting a long document into small passages so search can find the exact relevant bit instead of a whole file.
+  *Example: `AppleInc.pdf` (32 pages) → 64 chunks of ~512 tokens each.*
+- **Embedding / vector** — a list of numbers (768 here) that captures the *meaning* of a piece of text. Similar meanings → similar numbers.
+  *Example: `"total net sales"` → `[0.012, -0.088, 0.043, … , 0.021]` (768 numbers).*
+- **Vector dimension** — how many numbers are in each vector (768). Must match between the model and the database.
+  *Example: every chunk is stored as `{d₁, d₂, d₃, … , d₇₆₈}`; a question is turned into the same shape, then we find the closest.*
+- **Cosine similarity** — the math used to measure how "close in meaning" two vectors are. Higher = more similar.
+  *Example: our Apple query scored `0.74` against its best chunk (`1.0` = identical meaning).*
+
+### Finding the right passages
+
+- **Vector database** — a database built to store vectors and find the closest ones fast. (A normal SQL database can't do this well.)
+- **Qdrant** — the specific vector database this project uses. Runs in Docker locally, **Qdrant Cloud** in production.
+- **Dense / semantic search** — search by *meaning* (using embeddings). Good at synonyms; can miss exact keywords.
+- **BM25 / sparse / keyword search** — search by *exact words* (the classic method). Good at tickers and exact terms; blind to synonyms.
+  *Example: `"iPhone net sales"` ranks chunks containing those exact words highest.*
+- **Nearest-neighbour search** — finding the stored vectors closest to the query vector. The core operation of dense search.
+- **Hybrid search** — running dense + BM25 together to get both meaning and exact-keyword matching.
+- **Fusion** — merging the dense and keyword result lists into one ranked list (rescale each to 0–1, then blend by a weight).
+  *Example (this project, `HYBRID_ALPHA=0.5`): `final = 0.5·dense + 0.5·BM25` — i.e. Dense : BM25 = 0.5 : 0.5.*
+- **top-N / top-k** — how many results to keep. We grab a wide pool (top-N) to work with, then keep the final best few (top-k) for the AI.
+  *Example: fetch top-N = 20 candidates, then keep top-k = 5 for the AI.*
+- **Reranking / reranker** — a second, smarter relevance pass that re-scores the candidate passages against the question and keeps the best.
+  *Example: 20 fused candidates → Cohere re-scores → keeps the best 5.*
+- **Cross-encoder** — the kind of model a reranker uses: it reads the question and a passage *together* (more accurate, slower) rather than scoring them separately.
+- **Cohere** — the vendor providing the reranking model (optional).
+
+### Smart routing & quality
+
+- **Agentic / agent router** — an optional first step that *decides* how to handle a question: answer from docs, ask you to clarify, or search the web.
+- **Web-search fallback** — when an answer isn't in the documents, optionally look it up online (DuckDuckGo).
+- **RAGAS** — a tool that scores answer quality automatically using *another* AI as the judge (faithfulness, relevancy, etc.).
+- **Baseline (eval)** — a saved past score to compare against, so you can prove a change improved quality.
+
+### Tech stack
+
+- **FastAPI** — the Python framework that serves the API (handles HTTP requests).
+- **Pydantic** — validates and shapes the data going in/out of the API; **pydantic-settings** loads config from `.env`.
+- **LlamaIndex** — the library used to split documents into chunks.
+- **pypdf** — reads text out of PDF files.
+- **Gemini** — Google's AI, used for both embeddings and answer generation.
+- **SSE (Server-Sent Events) / streaming** — sending the answer word-by-word so the UI "types it out" live instead of waiting for the full reply.
+
+### Architecture & engineering terms
+
+- **API / endpoint** — a URL the app exposes (e.g. `/query`) that does one job when called.
+- **Interface / contract (ABC)** — an abstract definition of *what* a component must do, with no vendor code. Implementations plug into it.
+- **Ports & Adapters (Hexagonal)** — the design where the core defines contracts ("ports") and vendors plug in as "adapters", so the core never depends on a specific vendor.
+- **Dependency Injection** — giving a component its collaborators from outside rather than letting it create them, so they're easy to swap or fake in tests.
+- **Factory / composition root** — the single file (`factory.py`) that decides which real vendor is used for each contract.
+- **Feature flag** — an on/off switch (e.g. `ENABLE_RERANK`) that turns an optional capability on without code changes.
+- **Idempotent** — running it twice gives the same result (re-uploading a document doesn't create duplicates).
+- **Singleton** — one shared instance reused everywhere (e.g. one Qdrant connection for the whole app).
+
+### Running & deployment
+
+- **`.env` / environment variable** — a config file holding settings and secrets (keys), kept out of the code and out of git.
+- **Docker / docker-compose** — packaging the app (and Qdrant) into containers so they run the same anywhere; compose starts them together.
+- **Render** — the cloud service hosting the live backend.
+- **CORS** — a browser security rule controlling which website is allowed to call this API.
+- **Liveness vs readiness** — *liveness* = "is the process alive?"; *readiness* = "are its dependencies (Qdrant) reachable?" — checked at `/health` and `/health/ready`.
+- **Cold start** — the delay when a sleeping free-tier server wakes up on the first request after idle.
