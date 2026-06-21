@@ -144,6 +144,19 @@ def get_vector_store() -> VectorStore:
     raise ValueError(f"Unsupported VECTOR_STORE: {settings.VECTOR_STORE!r}")
 
 
+def get_corpus_pruner() -> "CorpusPruner":
+    """Assemble the corpus-prune service (vector store + the raw-corpus dir).
+
+    Used by both the CLI prune script and the admin API, so the keep-list logic
+    lives in exactly one place. Not cached — cheap to build and the raw dir can
+    change between calls."""
+    from pathlib import Path
+
+    from app.services.maintenance import CorpusPruner
+
+    return CorpusPruner(vector_store=get_vector_store(), raw_dir=Path("data/raw"))
+
+
 @lru_cache
 def get_parser() -> DocumentParser:
     return PyPdfParser()

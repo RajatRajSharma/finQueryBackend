@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.core.errors import ConfigurationError, UpstreamServiceError
-from app.routers import evals, health, query, upload
+from app.routers import admin, evals, health, query, upload
 
 app = FastAPI(title="FinQuery API", version="0.1.0")
 
@@ -50,3 +50,4 @@ app.include_router(health.router)
 app.include_router(upload.router)
 app.include_router(query.router)
 app.include_router(evals.router)   # Week 3: GET /evals (RAGAS scores)
+app.include_router(admin.router)   # admin-only: POST /admin/prune (corpus cleanup)

@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     # --- CORS: which frontend origin may call this API ---
     FRONTEND_ORIGIN: str = "http://localhost:5173"
 
+    # --- Admin API (destructive maintenance ops, e.g. POST /admin/prune) ---
+    # The admin endpoints are DISABLED until this is set. Once set, callers must
+    # send it as the `X-Admin-Token` header. Keep it secret; set only in prod env.
+    ADMIN_API_KEY: str = ""
+
     def gemini_api_keys(self) -> list[str]:
         """Non-empty Gemini keys in rotation order (1 -> 2 -> 3)."""
         return [

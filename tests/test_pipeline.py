@@ -26,7 +26,9 @@ from app.core.domain import (
     SearchHit,
     WebResult,
 )
+from app.config import settings
 from app.core.factory import (
+    get_corpus_pruner,
     get_evaluation_service,
     get_generation_service,
     get_query_router,
@@ -34,6 +36,7 @@ from app.core.factory import (
     get_web_search_tool,
 )
 from app.main import app
+from app.services.maintenance import CorpusPruner
 from app.services.agent import LLMQueryRouter
 from app.services.citations import build_citations
 from app.services.evaluation import EvaluationService
@@ -419,3 +422,70 @@ def test_gemini_pool_non_quota_error_is_not_rotated():
     with pytest.raises(UpstreamServiceError):
         pool.run("test", call)
     assert calls["n"] == 1         # a 400 is fatal — don't waste other keys on it
+
+
+# --- Corpus prune (maintenance service + admin endpoint) ---
+
+def _doc_chunk(source_file: str, company: str = "X") -> Chunk:
+    return Chunk(
+        chunk_id=f"{source_file}::c1", text="t", source_file=source_file,
+        company=company, page_number=1,
+    )
+
+
+def _pruner_with(tmp_path, keep_names, stored_sources):
+    for name in keep_names:                       # keep-list = PDFs in the raw dir
+        (tmp_path / name).write_bytes(b"%PDF-1.4")
+    store = FakeVectorStore()
+    store.upsert([_doc_chunk(src) for src in stored_sources])
+    return CorpusPruner(vector_store=store, raw_dir=tmp_path), store
+
+
+def test_prune_dry_run_reports_but_keeps_everything(tmp_path):
+    pruner, store = _pruner_with(tmp_path, ["Apple.pdf"], ["Apple.pdf", "Junk.pdf", "Junk.pdf"])
+    result = pruner.prune(apply=False)
+    assert result.applied is False
+    assert result.deleted_total == 2                # 2 Junk chunks would go
+    assert result.deleted_counts == {"Junk.pdf": 2}
+    assert result.kept_counts == {"Apple.pdf": 1}
+    assert len(store.all_chunks()) == 3             # nothing actually deleted
+
+
+def test_prune_apply_deletes_only_out_of_keeplist(tmp_path):
+    pruner, store = _pruner_with(tmp_path, ["Apple.pdf"], ["Apple.pdf", "Junk.pdf", "Junk.pdf"])
+    result = pruner.prune(apply=True)
+    assert result.applied is True
+    assert result.deleted_total == 2
+    assert [c.source_file for c in store.all_chunks()] == ["Apple.pdf"]
+
+
+def test_prune_refuses_empty_keeplist(tmp_path):
+    pruner, _ = _pruner_with(tmp_path, [], ["Junk.pdf"])
+    with pytest.raises(ValueError):
+        pruner.prune(apply=True)                    # empty raw dir must never wipe all
+
+
+def test_admin_prune_disabled_without_key(monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_API_KEY", "")
+    r = TestClient(app).post("/admin/prune")
+    assert r.status_code == 503
+
+
+def test_admin_prune_rejects_bad_token(monkeypatch):
+    monkeypatch.setattr(settings, "ADMIN_API_KEY", "secret")
+    r = TestClient(app).post("/admin/prune", headers={"X-Admin-Token": "wrong"})
+    assert r.status_code == 401
+
+
+def test_admin_prune_dry_run_with_valid_token(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "ADMIN_API_KEY", "secret")
+    pruner, store = _pruner_with(tmp_path, ["Apple.pdf"], ["Apple.pdf", "Junk.pdf"])
+    _override({get_corpus_pruner: pruner})
+    try:
+        r = TestClient(app).post("/admin/prune", headers={"X-Admin-Token": "secret"})
+    finally:
+        app.dependency_overrides.clear()
+    assert r.status_code == 200
+    body = r.json()
+    assert body["applied"] is False and body["deleted_total"] == 1
+    assert len(store.all_chunks()) == 2             # dry run deleted nothing

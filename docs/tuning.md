@@ -55,6 +55,7 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 | `QDRANT_URL` / `QDRANT_COLLECTION` | localhost:6333 / finquery_chunks | n/a | env/infra, not tuned |
 | `QDRANT_API_KEY` | (blank) | n/a | blank = local open Docker; set to a Qdrant Cloud key for prod (authed HTTPS) |
 | `FRONTEND_ORIGIN` | http://localhost:5173 | n/a | CORS; changes per deploy |
+| `ADMIN_API_KEY` | (blank) | n/a | blank = admin endpoints (POST /admin/prune) disabled; set a secret to enable, sent as `X-Admin-Token` |
 
 ---
 
@@ -69,5 +70,6 @@ So a low % means "we haven't proven it," not "it's wrong." These numbers get **r
 - **2026-06-16** — Week 2 Day 5 done. Logged a dense-vs-hybrid retrieval comparison in [tuning-runs.md](tuning-runs.md) (hybrid sharpens top-hit toward keyword pages, no regression). Rigorous `CHUNK_SIZE`/`TOP_K`/`HYBRID_ALPHA` sweep deferred to Week 3 RAGAS.
 - **2026-06-16** — Week 3 Days 1–2 done. Added `ENABLE_AGENT` (router: docs/clarify/web) and `ENABLE_WEB_SEARCH` (DuckDuckGo). Both off by default. Heads-up: with the agent on, each query costs an extra Gemini *generate* call — easy to hit the free-tier 20/min generation cap.
 - **2026-06-16** — Week 3 Day 3 (RAGAS) built + wired (`GET /evals`, judge on Gemini). Single-record scoring verified live; multi-question full runs hit the 20/min cap and return NaNs (`EVAL_SAMPLE_SIZE` added, default 2). NOTE: ragas 0.2.9 forced a pinned **langchain 0.3.x** stack — don't bump langchain to 1.x. Faithfulness metric on Gemini needs a prompt fix (returns 0/NaN).
+- **2026-06-21** — Added corpus-prune maintenance (CLI `scripts/prune_corpus.py` + `POST /admin/prune`, shared `CorpusPruner` service). New `ADMIN_API_KEY` gates the admin API (disabled when blank; sent as `X-Admin-Token`). Prune keeps the `data/raw` corpus and deletes all other chunks; dry-run by default.
 - **2026-06-20** — Added `QDRANT_API_KEY` (optional) to support an authenticated production Qdrant (Qdrant Cloud). Empty key = unchanged local open-Docker path; a set key is passed through to the client over HTTPS. Wired in `config.py`/`factory.py`/`qdrant_client.py` and both env files.
 - **2026-06-16** — Added multi-key rotation (`GEMINI_API_KEY_2/_3` + `GeminiKeyPool`, 1→2→3 on 429). Unblocked the daily cap → **first real RAGAS scores landed** (sample=1). Also swept `HYBRID_ALPHA` (keep 0.5). Day-4 eval dashboard wired to live `GET /evals`.

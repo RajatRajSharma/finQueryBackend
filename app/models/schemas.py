@@ -59,6 +59,21 @@ class QueryResponse(BaseModel):
     web_sources: list[WebSource] | None = None  # populated only on the web_search route
 
 
+class PruneResponse(BaseModel):
+    """Result of POST /admin/prune (corpus cleanup).
+
+    `applied` is False for a dry run (nothing deleted) and True when the prune
+    actually ran. `deleted_total`/`deleted_counts` are the chunks outside the
+    keep-list (deleted, or — on a dry run — what would be). `kept_counts` maps
+    each keep-list document to how many of its chunks are in the store."""
+
+    applied: bool
+    keep: list[str]
+    kept_counts: dict[str, int]
+    deleted_counts: dict[str, int]
+    deleted_total: int
+
+
 class EvalResponse(BaseModel):
     """UI-facing evaluation result (camelCase to match the frontend).
 
