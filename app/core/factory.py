@@ -1,13 +1,8 @@
 """Composition root — the single place where concrete vendors are chosen.
 
-Every "which implementation?" decision lives here and nowhere else. Routers and
-services ask the factory for an interface (Embedder, VectorStore, ...) and get
-back whatever the .env provider settings select. This is what makes the swap
-"change one line" real: to move embeddings to OpenAI you add an OpenAIEmbedder
-class and one `elif` below — no service, router, or pipeline is edited.
-
-Builders are cached (lru_cache) so the app reuses one Qdrant connection / one
-Gemini client process-wide instead of rebuilding them per request.
+Services ask for an interface (Embedder, VectorStore, ...) and get back whatever
+the .env provider settings select. Builders are lru_cached so connections/clients
+are reused process-wide instead of rebuilt per request.
 """
 
 from __future__ import annotations
@@ -39,8 +34,8 @@ from app.services.retrieval import RetrievalService
 
 @lru_cache
 def get_gemini_pool() -> GeminiKeyPool:
-    """One shared, rotating Gemini key pool (1 -> 2 -> 3 on quota) for the whole
-    process, so embedding + generation draw from and rotate the same keys."""
+    """Shared Gemini key pool (rotates 1 -> 2 -> 3 on quota), used by both
+    embedding and generation."""
     return GeminiKeyPool(settings.gemini_api_keys())
 
 
@@ -72,8 +67,7 @@ def get_llm() -> LLMProvider:
 
 @lru_cache
 def get_query_router() -> QueryRouter | None:
-    """The Week 3 agent router, or None when ENABLE_AGENT is off (then /query is
-    the Week 2 pipeline). Reuses the existing LLM — no new vendor/key."""
+    """Agent router, or None when ENABLE_AGENT is off. Reuses the existing LLM."""
     if not settings.ENABLE_AGENT:
         return None
     from app.services.agent import LLMQueryRouter
@@ -83,10 +77,8 @@ def get_query_router() -> QueryRouter | None:
 
 @lru_cache
 def get_web_search_tool() -> WebSearchTool | None:
-    """The Week 3 web-search fallback, or None when ENABLE_WEB_SEARCH is off.
-
-    Lazy-imports the provider SDK only when enabled, so `ddgs`/Tavily aren't hard
-    dependencies of the normal path."""
+    """Web-search fallback, or None when ENABLE_WEB_SEARCH is off. Lazy-imports
+    the provider SDK so it isn't a hard dependency of the normal path."""
     if not settings.ENABLE_WEB_SEARCH:
         return None
     provider = settings.WEB_SEARCH_PROVIDER.lower()
@@ -99,11 +91,8 @@ def get_web_search_tool() -> WebSearchTool | None:
 
 @lru_cache
 def get_reranker() -> Reranker | None:
-    """The Week 2 reranker, or None when disabled (then retrieval = Week 1).
-
-    Returns None unless ENABLE_RERANK is true, so the cohere SDK is only
-    imported (and a key only required) when reranking is actually switched on.
-    """
+    """Reranker, or None when ENABLE_RERANK is off. Lazy-imports the cohere SDK
+    (and requires a key) only when enabled."""
     if not settings.ENABLE_RERANK:
         return None
     provider = settings.RERANK_PROVIDER.lower()
@@ -116,13 +105,8 @@ def get_reranker() -> Reranker | None:
 
 @lru_cache
 def get_sparse_retriever() -> SparseRetriever | None:
-    """The Week 2 BM25 keyword retriever, or None when hybrid is disabled.
-
-    Built once (lru_cache) and indexed from whatever is currently in the vector
-    store, so the keyword half reuses the same corpus as dense search. See the
-    freshness trade-off in bm25_index.py. When ENABLE_HYBRID is false this is
-    None and retrieval stays dense-only.
-    """
+    """BM25 keyword retriever, or None when ENABLE_HYBRID is off. Indexed once
+    from the current vector-store contents (freshness trade-off: see bm25_index.py)."""
     if not settings.ENABLE_HYBRID:
         return None
     from app.clients.bm25_index import Bm25Retriever
@@ -145,11 +129,8 @@ def get_vector_store() -> VectorStore:
 
 
 def get_corpus_pruner() -> "CorpusPruner":
-    """Assemble the corpus-prune service (vector store + the raw-corpus dir).
-
-    Used by both the CLI prune script and the admin API, so the keep-list logic
-    lives in exactly one place. Not cached — cheap to build and the raw dir can
-    change between calls."""
+    """Assemble the corpus-prune service. Not cached — cheap to build and the
+    raw dir can change between calls."""
     from pathlib import Path
 
     from app.services.maintenance import CorpusPruner
@@ -170,10 +151,7 @@ def get_chunker() -> Chunker:
 
 
 def get_ingestion_service() -> IngestionService:
-    """Assemble the ingestion pipeline from its (interface-typed) parts.
-
-    Used directly as a FastAPI dependency: `Depends(get_ingestion_service)`.
-    """
+    """Assemble the ingestion pipeline. Used as a FastAPI dependency."""
     return IngestionService(
         parser=get_parser(),
         chunker=get_chunker(),
@@ -183,11 +161,7 @@ def get_ingestion_service() -> IngestionService:
 
 
 def get_retrieval_service() -> RetrievalService:
-    """Assemble the retrieval step (embedder + vector store + optional reranker).
-
-    When ENABLE_RERANK is off, get_reranker() is None and this is exactly the
-    Week 1 dense-only retriever.
-    """
+    """Assemble the retrieval step. With reranker/sparse None, this is dense-only."""
     return RetrievalService(
         embedder=get_embedder(),
         vector_store=get_vector_store(),
@@ -206,10 +180,8 @@ def get_generation_service() -> GenerationService:
 
 @lru_cache
 def get_evaluator() -> Evaluator:
-    """The Week 3 RAGAS evaluator.
-
-    Lazy-imports ragas only here, so it (and its heavy deps) aren't required for
-    the normal app — only when /evals is actually called."""
+    """RAGAS evaluator. Lazy-imports ragas (and its heavy deps) only here, so
+    it's required only when /evals is called."""
     provider = settings.EVAL_PROVIDER.lower()
     if provider == "ragas":
         from app.clients.ragas_evaluator import RagasEvaluator

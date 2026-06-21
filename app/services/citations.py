@@ -1,9 +1,4 @@
-"""Citations — maps the chunks used in an answer back to their source + page.
-
-Pure transformation logic (no external dependencies), so it's trivially
-testable. Takes the retrieval hits and produces the citation list the frontend
-renders under each answer as proof the answer is grounded.
-"""
+"""Citations — maps retrieval hits to their source + page for display."""
 
 from __future__ import annotations
 
@@ -13,11 +8,7 @@ _SNIPPET_CHARS = 240
 
 
 def build_citations(hits: list[SearchHit]) -> list[dict]:
-    """Turn retrieval hits into lightweight citation dicts.
-
-    Returns plain dicts (not Pydantic) so this stays framework-agnostic; the
-    router maps them into the Citation response schema.
-    """
+    """Turn retrieval hits into plain citation dicts (router maps to schema)."""
     citations: list[dict] = []
     for hit in hits:
         chunk = hit.chunk

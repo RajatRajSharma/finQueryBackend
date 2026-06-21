@@ -1,16 +1,11 @@
-"""Prune the vector store down to a canonical keep-list of documents.
+"""Prune the vector store to the keep-list (PDFs in data/raw/), deleting all
+other chunks. Thin CLI over the CorpusPruner service that POST /admin/prune uses.
 
-Corpus-maintenance job: keep only the chunks belonging to the documents in
-data/raw/ (the demo / evaluation corpus) and delete everything else that may
-have accumulated in the store (e.g. ad-hoc uploads). Thin CLI over the shared
-CorpusPruner service — the same logic POST /admin/prune uses.
-
-SAFE BY DEFAULT — a plain run only *reports* what it would delete:
+Dry-run by default — only reports what it would delete:
     python -m scripts.prune_corpus            # dry run (no changes)
     python -m scripts.prune_corpus --yes      # actually delete
 
-The keep-list is derived from the PDF filenames in data/raw/, which match the
-`source_file` stored on each chunk at ingest time.
+The keep-list matches the `source_file` stored on each chunk at ingest time.
 """
 
 from __future__ import annotations

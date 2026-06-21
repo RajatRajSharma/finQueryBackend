@@ -1,15 +1,12 @@
 """EvaluationService — runs the test questions through the real pipeline and
-scores them (Week 3, see docs/finQueryEvaluation.md).
+scores them (see docs/finQueryEvaluation.md).
 
-Flow: load the hand-written {question, ground_truth} set -> for each, run the
-SAME retrieval + generation the API uses (capturing the answer + the contexts it
-was grounded in) -> score the batch with an Evaluator (RAGAS) -> assemble a rich,
-UI-facing EvalRun (run id, timestamp, camelCase metrics, the pipeline config, a
-per-question breakdown with sources, and an optional baseline) -> cache it.
+Flow: load the {question, ground_truth} set -> run the same retrieval +
+generation the API uses -> score with an Evaluator (RAGAS) -> assemble an
+EvalRun (metrics, config, per-question breakdown, optional baseline) -> cache it.
 
-A real run is slow + quota-heavy, so GET /evals serves the cached run until it's
-older than EVAL_CACHE_TTL_HOURS. Depends only on interfaces/services — testable
-with fakes.
+A run is slow + quota-heavy, so GET /evals serves the cached run until it's
+older than EVAL_CACHE_TTL_HOURS.
 """
 
 from __future__ import annotations

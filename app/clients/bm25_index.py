@@ -1,21 +1,13 @@
 """BM25 keyword retriever — the sparse half of hybrid search.
 
-The ONLY file that imports rank-bm25. Holds an in-memory BM25Okapi index over
-the stored chunk text and scores a query against it lexically. This complements
-dense vector search: BM25 reliably matches exact tokens (ticker symbols,
-"Q4 2024", line-item names) that embeddings can blur.
+The only file that imports rank-bm25. Holds an in-memory BM25Okapi index over
+stored chunk text; matches exact tokens (tickers, "Q4 2024", line-item names)
+that dense embeddings blur.
 
-**Where the index lives (a deliberate trade-off):** it's built in-memory from
-whatever `VectorStore.all_chunks()` returns, once, when the factory first needs
-it (see `factory.get_sparse_retriever`). For the demo corpus (a few hundred
-short chunks) building is milliseconds. The limitation: a document uploaded
-*after* the index is built won't appear in BM25 until the index is rebuilt
-(process restart, or a future `/admin/reindex`). Dense search (Qdrant) is always
-fresh, so a new upload is still queryable — just not via the keyword half until
-reindex. Persisting/refreshing the index is a Week 3+ concern.
-
-Swap BM25 for another lexical engine by writing a sibling `SparseRetriever`;
-nothing in the query pipeline changes.
+Gotcha: the index is built once from `VectorStore.all_chunks()` (see
+`factory.get_sparse_retriever`). A document uploaded after build won't appear in
+BM25 until a rebuild (process restart or `/admin/reindex`). Dense search stays
+fresh, so new uploads are still queryable — just not via the keyword half.
 """
 
 from __future__ import annotations
@@ -27,9 +19,8 @@ from rank_bm25 import BM25Okapi
 from app.core.domain import Chunk, SearchHit
 from app.core.interfaces import SparseRetriever
 
-# Cheap, dependency-free tokenizer: lowercase alphanumeric runs. Good enough for
-# keyword matching over English filings; no stemming/stopwords on purpose (keeps
-# it predictable and avoids dragging in NLTK).
+# Tokenizer: lowercase alphanumeric runs. No stemming/stopwords on purpose
+# (predictable, and avoids an NLTK dependency).
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 

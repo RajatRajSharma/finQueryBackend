@@ -1,9 +1,7 @@
 """PyPdfParser — extracts page text from a PDF using pypdf.
 
-Implements the DocumentParser interface. Swapping to a different extraction
-engine later (e.g. an OCR-backed parser for scanned filings, or unstructured.io
-for better tables) means writing a sibling class here and pointing the factory
-at it — IngestionService never changes.
+Implements the DocumentParser interface; a different engine (OCR, unstructured.io)
+is a sibling class wired in via the factory.
 """
 
 from __future__ import annotations
@@ -21,7 +19,7 @@ class PyPdfParser(DocumentParser):
         for index, page in enumerate(reader.pages, start=1):
             text = (page.extract_text() or "").strip()
             if not text:
-                continue  # skip blank / image-only pages (no OCR in Week 1)
+                continue  # skip blank / image-only pages (no OCR)
             pages.append(
                 ParsedPage(source_file=source_name, page_number=index, text=text)
             )

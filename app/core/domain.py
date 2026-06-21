@@ -1,10 +1,8 @@
 """Internal domain models — the shared vocabulary of the RAG pipeline.
 
-These are deliberately separate from the API schemas in app/models/schemas.py
-(which describe the HTTP boundary). Domain models flow *between* components
-(parser -> chunker -> embedder -> vector store); schemas flow *over the wire*.
-Keeping them apart means the API can evolve without disturbing the engine,
-and vice-versa (Single Responsibility / stable core).
+Distinct from the API schemas in app/models/schemas.py: domain models flow
+between components (parser -> chunker -> embedder -> vector store); schemas flow
+over the wire. Keeping them apart lets the API and engine evolve independently.
 """
 
 from __future__ import annotations
@@ -23,8 +21,8 @@ class ParsedPage:
 
 @dataclass
 class Chunk:
-    """A retrievable unit: a slice of a page, plus everything needed for
-    storage, citation, and (optionally) its embedding vector."""
+    """A retrievable unit: a slice of a page, plus what's needed for storage,
+    citation, and (optionally) its embedding vector."""
 
     chunk_id: str           # stable, deterministic id -> idempotent re-ingest
     text: str
@@ -37,7 +35,7 @@ class Chunk:
 
 @dataclass
 class SearchHit:
-    """A chunk returned by retrieval, with its relevance score (used in Day 3)."""
+    """A chunk returned by retrieval, with its relevance score."""
 
     chunk: Chunk
     score: float
@@ -54,7 +52,7 @@ class IngestionResult:
     chunks_stored: int
 
 
-# --- Week 3: agentic routing ---
+# --- Agentic routing ---
 
 # The three ways the agent can handle a question (see services/agent.py).
 ROUTE_ANSWER = "answer_from_docs"   # answer from the uploaded reports (the default)
@@ -73,14 +71,14 @@ class RouteDecision:
 
 @dataclass(frozen=True)
 class WebResult:
-    """One result from the web-search fallback tool (Week 3)."""
+    """One result from the web-search fallback tool."""
 
     title: str
     url: str
     snippet: str
 
 
-# --- Week 3: RAGAS evaluation ---
+# --- RAGAS evaluation ---
 
 
 @dataclass
@@ -108,9 +106,9 @@ class EvalReport:
 class EvalRun:
     """The full, UI-facing evaluation result (cached + returned by GET /evals).
 
-    Built by EvaluationService by merging the evaluator's scores with each
-    record's answer/ground-truth/sources, plus run metadata, the pipeline config
-    used, and an optional baseline to show the before/after improvement."""
+    Merges the evaluator's scores with each record's answer/ground-truth/sources,
+    plus run metadata, the pipeline config, and an optional before/after baseline.
+    """
 
     run_id: str
     created_at: str                      # ISO-8601 UTC

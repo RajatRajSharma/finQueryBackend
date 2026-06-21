@@ -1,14 +1,10 @@
-"""Health router — liveness + readiness, split out of main.py.
+"""Health router — liveness + readiness.
 
-Two distinct concerns, two endpoints (this is the "properly divided" health
-API):
-  - GET /health        liveness  — is the process up? (no dependencies touched)
+  - GET /health        liveness  — is the process up? (touches no dependencies)
   - GET /health/ready  readiness — are downstream deps (Qdrant) reachable?
 
-Liveness is what a container orchestrator restarts on; readiness is what a load
-balancer uses to decide whether to send traffic. Keeping them separate is the
-standard production pattern and scales cleanly as more dependencies are added
-(just extend the `dependencies` map).
+Liveness drives orchestrator restarts; readiness drives load-balancer traffic.
+Add a dependency by extending the `dependencies` map.
 """
 
 from __future__ import annotations

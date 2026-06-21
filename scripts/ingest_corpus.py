@@ -1,10 +1,7 @@
 """Batch-ingest every PDF in data/raw/ into the vector store.
 
-Convenience CLI for seeding the corpus without going through the HTTP upload
-endpoint one file at a time. Reuses the exact same IngestionService + factory
-wiring the API uses — so it exercises the real pipeline, not a parallel one.
-
-Run from the backend repo root (Qdrant must be up, GEMINI_API_KEY set):
+Uses the same IngestionService + factory wiring as the API. Run from the repo
+root (Qdrant up, GEMINI_API_KEY set):
     python -m scripts.ingest_corpus
 """
 

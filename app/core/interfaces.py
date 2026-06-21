@@ -1,17 +1,8 @@
 """Abstract contracts for every swappable part of the RAG engine.
 
-This module is the backbone of the architecture's flexibility. Every concrete
-implementation (Gemini, Qdrant, pypdf, ...) depends on these abstractions, and
-every service depends on these abstractions too — never on a concrete vendor.
-
-That is the Dependency Inversion Principle: high-level policy (IngestionService,
-the query pipeline) and low-level detail (GeminiEmbedder, QdrantVectorStore)
-both point at the SAME interface. Swapping Gemini for OpenAI means writing one
-new class that satisfies `Embedder` and changing one line in factory.py — no
-service, router, or pipeline is touched (Open/Closed Principle).
-
-Interfaces are intentionally small (Interface Segregation): a parser only knows
-how to parse; an embedder only knows how to embed.
+Services depend on these abstractions, never on a concrete vendor; the concrete
+class is selected in factory.py. Swapping a vendor means one new class + one
+factory line.
 """
 
 from __future__ import annotations
@@ -81,15 +72,15 @@ class VectorStore(ABC):
 
     @abstractmethod
     def search(self, embedding: list[float], top_k: int) -> list[SearchHit]:
-        """Nearest-neighbour search (used by the Day 3 query pipeline)."""
+        """Nearest-neighbour search."""
         ...
 
     @abstractmethod
     def all_chunks(self) -> list[Chunk]:
         """Return every stored chunk (text + metadata, no vectors needed).
 
-        Used to (re)build the Week 2 BM25 keyword index from what's already in
-        the store, so the sparse half doesn't need a second source of truth.
+        Used to (re)build the BM25 keyword index so the sparse half needs no
+        second source of truth.
         """
         ...
 
@@ -97,10 +88,8 @@ class VectorStore(ABC):
     def delete_except(self, source_files: list[str]) -> int:
         """Delete every chunk whose `source_file` is NOT in `source_files`.
 
-        Corpus-maintenance op: keep a canonical set of documents and purge
-        anything else (e.g. ad-hoc uploads). Returns how many points were
-        deleted. An empty keep-list would wipe the collection, so callers must
-        guard against that.
+        Returns how many points were deleted. An empty keep-list would wipe the
+        collection, so callers must guard against that.
         """
         ...
 
@@ -111,7 +100,7 @@ class VectorStore(ABC):
 
 
 class LLMProvider(ABC):
-    """Generates an answer from a prompt. Implemented in Day 3 (generation)."""
+    """Generates an answer from a prompt."""
 
     @abstractmethod
     def generate(self, prompt: str) -> str:
@@ -119,22 +108,19 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def generate_stream(self, prompt: str) -> Iterator[str]:
-        """Yield the answer incrementally as text deltas (Week 2 SSE streaming).
+        """Yield the answer incrementally as text deltas (for SSE streaming).
 
-        Same prompt contract as `generate`; the caller concatenates the deltas.
-        Kept separate from `generate` so evals/tests can use the simple one-shot
-        call while the API streams to the browser token-by-token.
+        Same prompt contract as `generate`; kept separate so evals/tests can use
+        the one-shot call while the API streams token-by-token.
         """
         ...
 
 
 class Reranker(ABC):
-    """Re-scores retrieved chunks for true relevance and keeps the best few.
+    """Re-scores retrieved chunks for relevance and keeps the best few.
 
-    Week 2 quality lever (the cross-encoder half of the query pipeline). Takes
-    the over-fetched candidate hits and returns at most `top_n`, reordered by
-    the reranker's own relevance score. Like every other contract here it's
-    vendor-agnostic — Cohere today, swap by adding one class + one factory line.
+    Takes the over-fetched candidate hits and returns at most `top_n`, reordered
+    by the reranker's own relevance score.
     """
 
     @abstractmethod
@@ -147,11 +133,9 @@ class Reranker(ABC):
 class SparseRetriever(ABC):
     """Keyword/lexical retrieval (the BM25 half of hybrid search).
 
-    Complements dense vector search: BM25 nails exact terms — ticker symbols,
-    "Q4 2024", line-item names — that embeddings can blur. `index` (re)builds the
-    keyword index from a set of chunks; `search` returns the best `top_k` by
-    lexical score. Kept behind an interface so the implementation (rank-bm25
-    today) can be swapped without touching the query pipeline.
+    Complements dense search: BM25 nails exact terms — ticker symbols, "Q4 2024",
+    line-item names — that embeddings can blur. `index` (re)builds from a set of
+    chunks; `search` returns the best `top_k` by lexical score.
     """
 
     @abstractmethod
@@ -164,12 +148,10 @@ class SparseRetriever(ABC):
 
 
 class QueryRouter(ABC):
-    """The agentic layer: decides HOW to handle a question before retrieving.
+    """Decides how to handle a question before retrieving.
 
-    Returns a RouteDecision — answer from the documents, ask the user to
-    clarify, or fall back to web search. This is what makes the system "agentic
-    RAG" rather than a fixed pipeline. Vendor-agnostic like the rest: the LLM
-    implementation lives in services/agent.py behind this port.
+    Returns a RouteDecision — answer from docs, clarify, or fall back to web
+    search. Implementation lives in services/agent.py.
     """
 
     @abstractmethod
@@ -180,9 +162,6 @@ class QueryRouter(ABC):
 class WebSearchTool(ABC):
     """External web search — the agent's fallback when a question isn't covered
     by the uploaded reports (e.g. post-filing news, current prices).
-
-    Kept behind a port so the provider (DuckDuckGo, Tavily, …) can be swapped,
-    and so it's opt-in: the core demo never depends on an external search key.
     """
 
     @abstractmethod
@@ -191,12 +170,10 @@ class WebSearchTool(ABC):
 
 
 class Evaluator(ABC):
-    """Scores a batch of answered questions (Week 3 RAGAS evaluation).
+    """Scores a batch of answered questions (RAGAS evaluation).
 
-    Takes EvalRecords (question + pipeline answer + retrieved contexts +
-    ground truth) and returns an EvalReport of averaged quality metrics. Behind a
-    port so the scorer (RAGAS today, a fake in tests) is swappable and the
-    /evals endpoint never imports the eval library directly.
+    Takes EvalRecords (question + answer + contexts + ground truth) and returns
+    an EvalReport of averaged quality metrics.
     """
 
     @abstractmethod

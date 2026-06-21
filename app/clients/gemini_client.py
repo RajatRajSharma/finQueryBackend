@@ -1,17 +1,7 @@
-"""Gemini clients — the ONLY file that imports the google-genai SDK.
+"""Gemini clients — the only file that imports the google-genai SDK.
 
-Holds:
-  - GeminiKeyPool  — rotates across multiple API keys on quota exhaustion
-  - GeminiEmbedder -> Embedder      (embeds text)
-  - GeminiLLM      -> LLMProvider   (generates answers)
-
-Multiple free-tier keys each have their OWN per-project quota, so the pool tries
-key 1 until it's rate/quota-limited (HTTP 429), then key 2, then 3, … and only
-gives up (clean HTTP 503) when every key is exhausted. All Gemini SDK calls go
-through the pool, so the rotation is shared across embedding + generation.
-
-To add OpenAI, create app/clients/openai_client.py with sibling classes and
-register them in app/core/factory.py — nothing else in the codebase changes.
+GeminiKeyPool rotates API keys on 429 (each free-tier key has its own quota),
+shared across GeminiEmbedder and GeminiLLM. Raises 503 once all keys exhaust.
 """
 
 from __future__ import annotations
@@ -32,12 +22,10 @@ T = TypeVar("T")
 
 
 class GeminiKeyPool:
-    """A rotating pool of Gemini API keys, shared by the embedder + LLM.
+    """Rotating pool of Gemini API keys, shared by the embedder + LLM.
 
-    `run()` executes an SDK call against the current key; on a 429 (rate/quota
-    exhausted) it advances to the next key and retries, and only raises once all
-    keys are spent. The index only moves forward, so a key that's hit its daily
-    cap isn't retried on every later call.
+    `run()` retries the next key on a 429 and raises once all keys are spent.
+    The index only moves forward, so a daily-capped key isn't retried later.
     """
 
     def __init__(self, keys: list[str]) -> None:
@@ -68,7 +56,7 @@ class GeminiKeyPool:
             try:
                 return call(self._client(i))
             except genai_errors.APIError as exc:
-                if exc.code == 429:  # rate/quota exhausted on this key -> try the next
+                if exc.code == 429:  # quota exhausted -> try next key
                     last_exc = exc
                     continue
                 raise UpstreamServiceError(
@@ -127,8 +115,7 @@ class GeminiEmbedder(Embedder):
 class GeminiLLM(LLMProvider):
     """Generates answers with a Gemini chat model.
 
-    Low temperature keeps answers grounded and repeatable — we want the model
-    to stick to the retrieved context, not get creative.
+    Low temperature keeps answers grounded in the retrieved context.
     """
 
     def __init__(self, pool: GeminiKeyPool, model: str) -> None:

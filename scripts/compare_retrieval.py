@@ -1,16 +1,13 @@
 """Compare dense-only vs hybrid (dense + BM25) retrieval, side by side.
 
-The honest "measure" step for Week 2 Day 5: for each question we embed ONCE,
-then run (a) pure dense vector search and (b) hybrid fusion over the same query
-vector, and print the top chunks each returns. This isolates the retrieval
-change (which chunks surface) without spending any generation quota — and it's
-quota-friendly (one embed per question, reused by both modes).
+Embeds each question once, then runs pure dense search and hybrid fusion over
+the same vector, printing the top chunks each returns. Isolates the retrieval
+change without spending generation quota (one embed per question, reused).
 
     ./venv/Scripts/python.exe -m scripts.compare_retrieval
 
-Needs Qdrant up + a populated collection + GEMINI_API_KEY (for query embedding).
-Results get pasted into docs/tuning-runs.md. Re-run after tuning HYBRID_ALPHA /
-RETRIEVE_CANDIDATES to see the effect; RAGAS (Week 3) makes this rigorous.
+Needs Qdrant up + a populated collection + GEMINI_API_KEY. Re-run after tuning
+HYBRID_ALPHA / RETRIEVE_CANDIDATES; record results in docs/tuning-runs.md.
 """
 
 from __future__ import annotations
@@ -46,7 +43,7 @@ def main() -> None:
 
     print(f"# dense vs hybrid (alpha={ALPHA}, candidates={CANDIDATES}, top_k={TOP_K})\n")
     for q in QUESTIONS:
-        qvec = embedder.embed_query(q)  # one embed, reused by both modes
+        qvec = embedder.embed_query(q)  # reused by both modes
         dense = store.search(qvec, TOP_K)
         pool_dense = store.search(qvec, CANDIDATES)
         sparse = bm25.search(q, CANDIDATES)

@@ -1,9 +1,6 @@
 """FinQuery backend — FastAPI app entry point.
 
-Assembles the app: middleware + router registration only. No business logic
-and no endpoints live here — each concern is a router under app/routers/ and
-each piece of engine logic is a service/client behind an interface. Adding a
-feature = add a router and include it below.
+Middleware + router registration only; no business logic or endpoints here.
 """
 
 from fastapi import FastAPI, Request
@@ -28,10 +25,10 @@ app.add_middleware(
 async def _configuration_error_handler(
     request: Request, exc: ConfigurationError
 ) -> JSONResponse:
-    """Missing/invalid config -> 503 with a helpful message, never a raw 500.
+    """Missing/invalid config -> 503, never a raw 500.
 
-    Catches the error wherever it's raised, including during dependency
-    construction (which runs before the endpoint body)."""
+    Also catches errors raised during dependency construction (before the
+    endpoint body runs)."""
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
@@ -39,15 +36,14 @@ async def _configuration_error_handler(
 async def _upstream_service_error_handler(
     request: Request, exc: UpstreamServiceError
 ) -> JSONResponse:
-    """A vendor dependency (Gemini) failed transiently -> 503, not a raw 500.
-
-    Keeps the contract honest: the service is up, but a provider it depends on
-    is momentarily unavailable (overload/rate-limit/timeout). Clients can retry."""
+    """Transient vendor (Gemini) failure -> 503, not a raw 500. The service is
+    up but a provider is momentarily unavailable (overload/rate-limit/timeout);
+    clients can retry."""
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 # Mount routers.
 app.include_router(health.router)
 app.include_router(upload.router)
 app.include_router(query.router)
-app.include_router(evals.router)   # Week 3: GET /evals (RAGAS scores)
+app.include_router(evals.router)   # GET /evals (RAGAS scores)
 app.include_router(admin.router)   # admin-only: POST /admin/prune (corpus cleanup)

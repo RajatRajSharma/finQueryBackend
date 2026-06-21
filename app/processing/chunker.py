@@ -1,12 +1,8 @@
 """SentenceChunker — splits page text into ~token-sized chunks.
 
-Implements the Chunker interface using LlamaIndex's SentenceSplitter (which
-respects sentence boundaries and adds overlap so context isn't lost at the
-seams). We split *per page* so every resulting chunk keeps its page number —
-that's what lets the answer cite "AppleInc.pdf, p.42" later.
-
-LlamaIndex is contained entirely within this file. If we change chunking
-strategy (semantic, markdown-aware, fixed-size), it's a one-class swap.
+Implements the Chunker interface via LlamaIndex's SentenceSplitter (respects
+sentence boundaries, adds overlap). Splits *per page* so each chunk retains its
+page number for citations. LlamaIndex is contained to this file.
 """
 
 from __future__ import annotations

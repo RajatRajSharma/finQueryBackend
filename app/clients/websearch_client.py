@@ -1,12 +1,8 @@
 """Web search client — the agent's fallback when a question isn't in the docs.
 
-Default provider is **DuckDuckGo** via the keyless `ddgs` package, so the feature
-needs no API key (the core demo never depends on it; it's opt-in behind
-ENABLE_WEB_SEARCH). Swap to a keyed provider (e.g. Tavily) by adding a sibling
-class that satisfies `WebSearchTool` and one branch in factory.get_web_search_tool.
-
-Lazy-imported by the factory ONLY when ENABLE_WEB_SEARCH is true, so `ddgs` is
-not a hard dependency for the normal path.
+Default provider is DuckDuckGo via the keyless `ddgs` package, opt-in behind
+ENABLE_WEB_SEARCH. Lazy-imported by the factory only when enabled, so `ddgs`
+isn't a hard dependency on the normal path.
 """
 
 from __future__ import annotations

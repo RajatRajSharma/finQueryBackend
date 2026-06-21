@@ -1,13 +1,7 @@
 """GenerationService — turns a question + retrieved chunks into an answer.
 
-This is the "augment -> generate" half of the RAG mental model. It depends only
-on the LLMProvider interface, so it neither knows nor cares whether Gemini or
-OpenAI is behind it. The prompt is built here (one responsibility: assembling
-context + instructions); the actual model call lives in the provider.
-
-Grounding rule: the prompt explicitly tells the model to answer ONLY from the
-provided context and to say so when the answer isn't there — that's what keeps
-faithfulness high and hallucinations low (measured later by RAGAS).
+Builds the prompt here; the model call lives behind the LLMProvider interface.
+The prompt restricts the model to the provided context to keep faithfulness high.
 """
 
 from __future__ import annotations

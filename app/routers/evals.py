@@ -1,13 +1,12 @@
 """Evals router — RAGAS quality scores for the dashboard.
 
-  - GET  /evals       → the last cached run (instant), with `stale`/`running`
-                        flags so the UI knows whether to trigger a refresh.
-  - POST /evals/run   → kick off a fresh evaluation in the BACKGROUND (a real run
-                        is slow + quota-heavy), optionally saving it as the baseline.
+  - GET  /evals       → last cached run, with `stale`/`running` flags.
+  - POST /evals/run   → kick off a fresh evaluation in the background,
+                        optionally saving it as the baseline.
 
-A full run is throttled to the Gemini free-tier limit and can take minutes, so it
-never blocks the request — the UI polls GET /evals until `running` clears. The
-heavy lifting lives in EvaluationService; this router never imports ragas.
+A run is throttled to the Gemini free-tier limit and can take minutes, so it
+never blocks the request — the UI polls GET /evals until `running` clears.
+EvaluationService does the work; this router never imports ragas.
 """
 
 from __future__ import annotations

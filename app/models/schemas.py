@@ -1,9 +1,8 @@
 """API schemas — the HTTP boundary contract (request/response shapes).
 
-These Pydantic models are what the frontend sees and what src/types/index.ts
-mirrors (see finQueryArchitecture.md §8). They are deliberately decoupled from
-the internal domain models in app/core/domain.py: the wire format can change
-without touching the engine, and the engine can change without breaking the API.
+Pydantic models mirrored by src/types/index.ts (see finQueryArchitecture.md §8).
+Decoupled from the internal domain models in app/core/domain.py so the wire
+format and engine can change independently.
 """
 
 from __future__ import annotations
@@ -52,20 +51,18 @@ class WebSource(BaseModel):
 class QueryResponse(BaseModel):
     answer: str
     citations: list[Citation]
-    # Week 3 (agent): which route handled this — "answer_from_docs" | "clarify"
-    # | "web_search". None when the agent is disabled. Additive: existing
-    # clients ignore it.
+    # Which route handled this — "answer_from_docs" | "clarify" | "web_search".
+    # None when the agent is disabled.
     route: str | None = None
     web_sources: list[WebSource] | None = None  # populated only on the web_search route
 
 
 class PruneResponse(BaseModel):
-    """Result of POST /admin/prune (corpus cleanup).
+    """Result of POST /admin/prune.
 
-    `applied` is False for a dry run (nothing deleted) and True when the prune
-    actually ran. `deleted_total`/`deleted_counts` are the chunks outside the
-    keep-list (deleted, or — on a dry run — what would be). `kept_counts` maps
-    each keep-list document to how many of its chunks are in the store."""
+    `applied` is False on a dry run, True when the prune ran. `deleted_total`/
+    `deleted_counts` count chunks outside the keep-list (deleted, or would-be on
+    a dry run). `kept_counts` maps each keep-list document to its stored chunks."""
 
     applied: bool
     keep: list[str]
@@ -77,10 +74,9 @@ class PruneResponse(BaseModel):
 class EvalResponse(BaseModel):
     """UI-facing evaluation result (camelCase to match the frontend).
 
-    `metrics`/`baseline` are camelCase metric maps (faithfulness, answerRelevancy,
+    `metrics`/`baseline` are metric maps (faithfulness, answerRelevancy,
     contextPrecision, contextRecall). `questions` rows mix per-question scores
-    with answer/groundTruth/retrievedContexts. `stale`/`running` let the UI decide
-    whether to trigger a fresh run."""
+    with answer/groundTruth/retrievedContexts."""
 
     runId: str
     createdAt: str

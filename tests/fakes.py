@@ -1,9 +1,7 @@
 """In-memory fake implementations of the engine interfaces.
 
-These exist purely so the pipeline can be tested with NO Qdrant, NO API key,
-and NO real PDFs. That they're easy to write is the whole point of coding
-against interfaces — the same IngestionService/RetrievalService that run with
-Gemini + Qdrant in production run here with these fakes in a millisecond.
+Let the pipeline be tested with no Qdrant, no API key, and no real PDFs — the
+same services that run on Gemini + Qdrant in production run here on these fakes.
 """
 
 from __future__ import annotations
@@ -68,7 +66,7 @@ class FakeEmbedder(Embedder):
         return self._dimension
 
     def _vec(self, text: str) -> list[float]:
-        # Cheap deterministic vector: seeded by char codes, fixed length.
+        # Deterministic vector seeded by char codes, fixed length.
         base = [float((ord(c) % 17) / 17) for c in text[: self._dimension]]
         return (base + [0.0] * self._dimension)[: self._dimension]
 
@@ -128,8 +126,7 @@ class FakeLLM(LLMProvider):
 
 
 class FakeEvaluator(Evaluator):
-    """Scores deterministically (no LLM): records what it was given, returns
-    flat 1.0s. Lets the EvaluationService + /evals be tested with no ragas/API."""
+    """Records what it was given and returns flat 1.0s — no ragas/API needed."""
 
     def __init__(self) -> None:
         self.seen: list[EvalRecord] = []
@@ -167,11 +164,8 @@ class FakeWebSearchTool(WebSearchTool):
 
 
 class FakeSparseRetriever(SparseRetriever):
-    """Keyword retriever fake: returns pre-set hits, ignoring the real query.
-
-    Lets fusion be tested deterministically — you hand it the sparse side of the
-    result and assert how it combines with the dense side.
-    """
+    """Returns pre-set hits, ignoring the query — you supply the sparse side of
+    a fusion test and assert how it combines with the dense side."""
 
     def __init__(self, hits: list[SearchHit] | None = None) -> None:
         self._hits = hits or []
@@ -185,12 +179,9 @@ class FakeSparseRetriever(SparseRetriever):
 
 
 class FakeReranker(Reranker):
-    """Deterministic reranker: reverses the candidate order and keeps top_n.
-
-    Reversing makes the reorder observable in tests (the last candidate becomes
-    first); the descending scores prove the reranker's score replaces the
-    store's. Records the pool size it was handed so tests can assert over-fetch.
-    """
+    """Reverses candidate order and keeps top_n, so the reorder is observable
+    (last becomes first) and descending scores replace the store's. Records the
+    pool size handed in so tests can assert over-fetch."""
 
     def __init__(self) -> None:
         self.last_pool_size: int | None = None

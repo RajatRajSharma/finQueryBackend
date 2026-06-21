@@ -1,13 +1,8 @@
 """Corpus-maintenance service — prune the vector store to a canonical keep-list.
 
-Shared engine logic behind both the CLI (scripts/prune_corpus.py) and the
-admin API (POST /admin/prune), so there is one source of truth for "what gets
-kept and what gets deleted". Like every service it depends only on the
-VectorStore interface, never on a vendor SDK.
-
-The keep-list is the set of PDF filenames currently in the raw dir (the demo /
-evaluation corpus). Everything else in the store — e.g. ad-hoc uploads — is
-reported (dry run) or deleted (apply=True).
+Shared by the CLI (scripts/prune_corpus.py) and the admin API (POST
+/admin/prune). The keep-list is the PDF filenames in the raw dir; everything
+else in the store is reported (dry run) or deleted (apply=True).
 """
 
 from __future__ import annotations

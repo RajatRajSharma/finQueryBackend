@@ -1,9 +1,8 @@
 """Admin router — destructive maintenance ops, behind a token guard.
 
 POST /admin/prune deletes every stored chunk whose document isn't in the
-canonical keep-list (the PDFs in data/raw/). It's the API fallback for
-scripts/prune_corpus.py — same CorpusPruner service underneath — so the corpus
-can be cleaned up without shell access if the job can't be run.
+keep-list (the PDFs in data/raw/). API fallback for scripts/prune_corpus.py,
+sharing the same CorpusPruner service.
 
 Safety:
   - Disabled unless ADMIN_API_KEY is set (returns 503 otherwise).

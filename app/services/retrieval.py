@@ -1,16 +1,11 @@
 """RetrievalService — finds the chunks most relevant to a question.
 
-Week 1: dense vector search only (embed the question, nearest-neighbour search
-in the vector store). Week 2 adds the BM25 sparse half (fused with dense) and
-Cohere reranking — and because this service depends only on small interfaces,
-those upgrades slot in without the query router or generation ever changing.
-
-The query path, fullest form:
+Full query path:
     dense ─┐
            ├─ fuse (HYBRID_ALPHA) ─ pool ─ rerank ─ top_k ─► generation
     sparse ┘
-Each stage is optional and flag-gated; with none of them, this is byte-for-byte
-the Week 1 dense-only retriever.
+The sparse and rerank stages are optional and flag-gated; with neither, this is
+a plain dense-only retriever.
 """
 
 from __future__ import annotations
@@ -22,9 +17,8 @@ from app.core.interfaces import Embedder, Reranker, SparseRetriever, VectorStore
 def _normalize(hits: list[SearchHit]) -> dict[str, float]:
     """Min-max normalise a hit list's scores to [0,1], keyed by chunk_id.
 
-    Dense (cosine) and sparse (BM25) scores live on totally different scales, so
-    we normalise each list independently before combining — otherwise BM25's
-    larger raw numbers would always dominate.
+    Dense (cosine) and sparse (BM25) scores are on different scales, so each list
+    is normalised independently before fusion.
     """
     if not hits:
         return {}
@@ -75,7 +69,7 @@ class RetrievalService:
         self._top_k = top_k
         self._reranker = reranker
         self._sparse = sparse
-        # Only matters when fusing/reranking; defaults to top_k so over-fetch is opt-in.
+        # Defaults to top_k so over-fetch (for fuse/rerank) is opt-in.
         self._candidates = candidates or top_k
         self._alpha = hybrid_alpha
 
@@ -83,11 +77,11 @@ class RetrievalService:
         k = top_k or self._top_k
         query_vector = self._embedder.embed_query(question)
 
-        # Fast path: Week 1 (no hybrid, no rerank) — dense nearest-neighbour search.
+        # Fast path: dense nearest-neighbour only (no hybrid, no rerank).
         if self._sparse is None and self._reranker is None:
             return self._store.search(query_vector, k)
 
-        # Over-fetch a wider candidate pool for fusion/rerank to work on.
+        # Over-fetch a wider candidate pool for fusion/rerank.
         n = max(self._candidates, k)
         dense_hits = self._store.search(query_vector, n)
 

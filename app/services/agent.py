@@ -1,15 +1,11 @@
-"""Agent router — decides HOW to answer a question before retrieving anything.
-
-This is the "agentic" layer of the RAG pipeline (Week 3). An LLM classifies the
-question into one of three routes:
+"""Agent router — an LLM classifies a question into one of three routes:
 
   - answer_from_docs : answerable from the uploaded annual reports (the default)
   - clarify          : too vague/ambiguous — ask the user a one-line follow-up
   - web_search       : needs current/external info not in the filings
 
-It depends only on the LLMProvider interface (reuses the existing Gemini client —
-no new vendor), and degrades safely: any parse/LLM hiccup falls back to
-`answer_from_docs`, so a flaky router never blocks the core path.
+Any parse/LLM error falls back to `answer_from_docs`, so the router can never
+block the core path.
 """
 
 from __future__ import annotations

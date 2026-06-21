@@ -1,14 +1,14 @@
 """Query router — POST /query and POST /query/stream.
 
-Orchestrates the (optional, flag-gated) agent and the retrieve→generate→cite
-pipeline, all via injected services — no vendor imports here.
+Orchestrates the optional flag-gated agent and the retrieve→generate→cite
+pipeline via injected services — no vendor imports here.
 
-Week 3 adds an agent step in front: when ENABLE_AGENT is on, a QueryRouter
-classifies the question first and the endpoint branches:
-  - answer_from_docs → the Week 2 hybrid/rerank pipeline (also the default)
+When ENABLE_AGENT is on, a QueryRouter classifies the question and the endpoint
+branches:
+  - answer_from_docs → the hybrid/rerank pipeline (also the default)
   - clarify          → return a one-line follow-up question instead of an answer
   - web_search       → fall back to the web tool (if ENABLE_WEB_SEARCH), else docs
-When the agent is off, get_query_router() is None and this is exactly Week 2.
+When the agent is off, get_query_router() is None and only the docs path runs.
 """
 
 from __future__ import annotations

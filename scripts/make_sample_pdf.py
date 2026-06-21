@@ -1,17 +1,13 @@
-"""Generate a small, TEXT-BASED annual-report PDF for end-to-end testing.
+"""Generate a small text-based 10-K-style PDF for end-to-end testing.
 
 The real corpus in data/raw/ is image-only (scanned), so pypdf extracts zero
-text and ingestion produces zero chunks. This script writes a synthetic but
-realistic 10-K-style report with selectable text, so the full pipeline
-(parse -> chunk -> embed -> store -> retrieve -> generate) can be exercised
-live against Qdrant + Gemini.
+text. This writes a synthetic report with selectable text so the full pipeline
+(parse -> chunk -> embed -> store -> retrieve -> generate) can run live.
 
     ./venv/Scripts/python.exe -m scripts.make_sample_pdf
 
-Output: data/raw/Acme.pdf  (fictional company — safe, not real financial data).
-
-Requires fpdf2 (dev-only; NOT a runtime dependency, so it's not in
-requirements.txt). Install with: pip install fpdf2
+Output: data/raw/Acme.pdf (fictional company, not real financial data).
+Requires fpdf2 (dev-only, not in requirements.txt): pip install fpdf2
 """
 
 from __future__ import annotations
@@ -20,7 +16,7 @@ from pathlib import Path
 
 from fpdf import FPDF
 
-# Fictional figures — clearly made up, used only to verify retrieval/citation.
+# Fictional figures — used only to verify retrieval/citation.
 PAGES: list[tuple[str, list[str]]] = [
     (
         "Acme Corporation - 2025 Annual Report",

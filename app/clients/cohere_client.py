@@ -1,16 +1,10 @@
-"""Cohere client — the ONLY file that imports the cohere SDK.
+"""Cohere client — the only file that imports the cohere SDK.
 
-Holds the Cohere-backed Reranker. Reranking takes the ~20 candidate chunks from
-hybrid/dense retrieval and lets a cross-encoder re-score them for true relevance
-to the question, keeping only the best few before generation — the single
-biggest answer-quality lever in Week 2.
+Cohere-backed Reranker: cross-encoder re-scores the ~20 retrieval candidates by
+relevance, keeping only the best few before generation.
 
-Swap to another reranker (e.g. a local cross-encoder, Voyage, Jina) by writing a
-sibling class that satisfies `Reranker` and registering it in factory.py;
-nothing else in the query pipeline changes.
-
-Lazy-imported by the factory ONLY when ENABLE_RERANK is true, so the cohere SDK
-is not a hard dependency for the Week 1 / rerank-off path.
+Lazy-imported by the factory only when ENABLE_RERANK is true, so the cohere SDK
+isn't a hard dependency on the rerank-off path.
 """
 
 from __future__ import annotations
@@ -29,9 +23,8 @@ from app.core.interfaces import Reranker
 def _translate_cohere_errors(action: str) -> Iterator[None]:
     """Turn cohere SDK failures into a clean UpstreamServiceError -> HTTP 503.
 
-    Mirrors gemini_client._translate_gemini_errors. The catch is intentionally
-    broad because this wrapper does nothing but the network call + result
-    mapping; tighten to cohere's concrete error type once it's live-tested.
+    Catch is broad because the wrapper only does the network call + mapping;
+    tighten to cohere's concrete error type once it's live-tested.
     """
     try:
         yield
@@ -66,8 +59,8 @@ class CohereReranker(Reranker):
                 top_n=min(top_n, len(hits)),
             )
 
-        # Cohere returns results referencing the original index + a relevance
-        # score; map back to our SearchHit, replacing the score with Cohere's.
+        # Cohere results reference the original index; map back to SearchHit
+        # with Cohere's relevance score.
         reranked: list[SearchHit] = []
         for result in response.results:
             original = hits[result.index]

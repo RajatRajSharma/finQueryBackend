@@ -1,13 +1,11 @@
 """QdrantVectorStore — stores and searches chunk embeddings in Qdrant.
 
-Implements the VectorStore interface and is the ONLY file that imports the
-qdrant-client SDK. Swapping to pgvector/Weaviate/Pinecone later = one new
-class satisfying VectorStore + one line in factory.py.
+Implements VectorStore; the only file that imports the qdrant-client SDK.
 
-Qdrant point IDs must be UUIDs or unsigned ints, but our chunk_ids are readable
+Qdrant point IDs must be UUIDs or unsigned ints, but chunk_ids are readable
 strings ("AppleInc.pdf::p42::c1"). We derive a deterministic UUIDv5 from the
-chunk_id so re-ingesting the same chunk overwrites the same point (idempotent),
-while keeping the human-readable id in the payload for citations.
+chunk_id so re-ingesting overwrites the same point (idempotent), keeping the
+readable id in the payload for citations.
 """
 
 from __future__ import annotations
@@ -35,8 +33,7 @@ def _point_id(chunk_id: str) -> str:
 
 class QdrantVectorStore(VectorStore):
     def __init__(self, url: str, collection: str, api_key: str | None = None) -> None:
-        # api_key is None/empty for a local open instance, and set for an
-        # authenticated production cluster (e.g. Qdrant Cloud over HTTPS).
+        # api_key is None/empty for a local instance, set for an authenticated cluster.
         self._client = QdrantClient(url=url, api_key=api_key or None)
         self._collection = collection
 
@@ -69,10 +66,9 @@ class QdrantVectorStore(VectorStore):
         return len(points)
 
     def all_chunks(self) -> list[Chunk]:
-        """Scroll the whole collection, returning chunks (payload only, no vectors).
+        """Scroll the whole collection as chunks (payload only, no vectors).
 
-        Used to build the BM25 keyword index. Pages through Qdrant in batches so
-        it works for a large collection; vectors are skipped to keep it light.
+        Used to build the BM25 index. Paged in batches; vectors skipped to stay light.
         """
         if not self._client.collection_exists(self._collection):
             return []
@@ -128,10 +124,8 @@ class QdrantVectorStore(VectorStore):
     def delete_except(self, source_files: list[str]) -> int:
         """Delete points whose source_file is not in the keep-list.
 
-        Selects points where source_file does NOT match any keep entry
-        (`must_not` + MatchAny) and deletes them. Counts first so we can report
-        how many were removed. Guards against an empty keep-list, which would
-        otherwise match nothing in must_not and wipe the whole collection.
+        Counts first to report how many were removed. Refuses an empty keep-list,
+        which would otherwise match nothing in must_not and wipe the collection.
         """
         if not source_files:
             raise ValueError("delete_except needs a non-empty keep-list (refusing to wipe all).")

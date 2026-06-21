@@ -1,17 +1,12 @@
-"""RAGAS evaluator — the ONLY file that imports ragas / langchain-google-genai.
+"""RAGAS evaluator — the only file that imports ragas / langchain-google-genai.
 
-Scores answered questions on three RAGAS metrics using an LLM-as-judge:
-  - faithfulness       : is the answer backed by the retrieved contexts?
-  - answer_relevancy   : does the answer address the question?
-  - context_precision  : did retrieval pull relevant chunks? (grades retrieval)
+Scores answers via LLM-as-judge on faithfulness, answer_relevancy,
+context_precision, context_recall. Judge + embeddings point at Gemini (not
+RAGAS's default OpenAI) to stay single-vendor; lazy-imported, constructed only
+when EVAL_PROVIDER=ragas.
 
-The judge + embeddings are pointed at **Gemini** (not RAGAS's default OpenAI) so
-the project stays single-vendor. Everything is lazy-imported and only constructed
-when EVAL_PROVIDER=ragas, so ragas isn't a hard dependency of the app.
-
-Caveat (documented in docs/tuning.md): RAGAS makes several judge calls per question, so a
-full run easily exceeds the Gemini free-tier rate limits — keep EVAL_SAMPLE_SIZE
-small. Failures are translated to UpstreamServiceError -> HTTP 503.
+Caveat: several judge calls per question, so a full run easily exceeds the
+Gemini free-tier rate limit — keep EVAL_SAMPLE_SIZE small. Failures map to 503.
 """
 
 from __future__ import annotations
@@ -68,15 +63,15 @@ class RagasEvaluator(Evaluator):
         if not records:
             return EvalReport(metrics={}, per_question=[], num_questions=0)
 
-        # Try each key in order. If a run comes back fully empty (every judge call
-        # failed — i.e. that key is quota-exhausted), rotate to the next key.
+        # Try each key in order; a fully-empty run means that key is
+        # quota-exhausted, so rotate to the next.
         df = None
         for i, key in enumerate(self._keys):
             df = self._score(key, records)
             present = [m for m in _METRIC_COLUMNS if m in df.columns]
             has_any_score = any(df[m].notna().any() for m in present)
             if has_any_score or i == len(self._keys) - 1:
-                break  # got scores, or this was the last key
+                break  # got scores, or last key
         return _report_from_dataframe(df, [r.question for r in records])
 
     def _score(self, key: str, records: list[EvalRecord]):
@@ -99,9 +94,8 @@ class RagasEvaluator(Evaluator):
             )
             from ragas.run_config import RunConfig
 
-            # Throttle judge calls to stay under the Gemini free-tier rate limit:
-            # a token-bucket limiter (requests/sec) + single-worker RunConfig so
-            # RAGAS doesn't fire its metric jobs concurrently and burst the cap.
+            # Throttle judge calls under the Gemini free-tier limit: token-bucket
+            # limiter + single-worker RunConfig so RAGAS doesn't burst the cap.
             rate_limiter = InMemoryRateLimiter(
                 requests_per_second=max(self._llm_rpm, 1) / 60.0,
                 check_every_n_seconds=0.5,

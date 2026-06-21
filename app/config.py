@@ -1,8 +1,7 @@
 """Central configuration for the FinQuery backend.
 
-All settings load from environment variables (and the local .env file in dev)
-via pydantic-settings. Import the singleton `settings` anywhere you need a
-value — never read os.environ directly elsewhere.
+Settings load from environment variables (and .env in dev) via pydantic-settings.
+Import the singleton `settings`; never read os.environ directly elsewhere.
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,26 +14,22 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- Provider selection (the ONLY place to switch vendors) ---
-    # Swap "gemini" -> "openai" here (after adding the impl) and nothing
-    # else in the codebase needs to change. See app/core/factory.py.
+    # --- Provider selection (the only place to switch vendors; see factory.py) ---
     EMBED_PROVIDER: str = "gemini"
     LLM_PROVIDER: str = "gemini"
     VECTOR_STORE: str = "qdrant"
 
-    # --- API keys (fill in .env — empty for now) ---
-    GEMINI_API_KEY: str = ""        # embeddings + generation (Week 1)
-    # Extra free-tier keys (each its own project quota). The pool rotates
-    # 1 -> 2 -> 3 on quota exhaustion; leave blank if you only have one.
+    # --- API keys (fill in .env) ---
+    GEMINI_API_KEY: str = ""        # embeddings + generation
+    # Extra free-tier keys (each its own project quota). Pool rotates 1 -> 2 -> 3
+    # on quota exhaustion; leave blank if you only have one.
     GEMINI_API_KEY_2: str = ""
     GEMINI_API_KEY_3: str = ""
     OPENAI_API_KEY: str = ""        # only if you switch *_PROVIDER to openai
-    COHERE_API_KEY: str = ""        # reranking (Week 2 — leave empty for now)
+    COHERE_API_KEY: str = ""        # reranking
 
     # --- Qdrant vector DB ---
-    # Local dev: Dockerized Qdrant on localhost, no auth (key empty).
-    # Production: a Qdrant Cloud URL (https://...:6333) + its API key. The key
-    # is optional so the local open instance keeps working with an empty value.
+    # Local dev: Dockerized Qdrant, no auth (key empty). Prod: Cloud URL + key.
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION: str = "finquery_chunks"
     QDRANT_API_KEY: str = ""
@@ -49,29 +44,28 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 50
     TOP_K: int = 5                              # chunks fed to the LLM (final)
 
-    # --- Week 2: reranking (Cohere) ---
-    # When ENABLE_RERANK is true, retrieval over-fetches RETRIEVE_CANDIDATES
-    # chunks and a reranker keeps the best TOP_K. Off by default so Week 1
-    # behaviour is unchanged until COHERE_API_KEY is set.
+    # --- Reranking (Cohere) ---
+    # When true, retrieval over-fetches RETRIEVE_CANDIDATES chunks and the
+    # reranker keeps the best TOP_K. Off by default until COHERE_API_KEY is set.
     ENABLE_RERANK: bool = False
     RERANK_PROVIDER: str = "cohere"
     RERANK_MODEL: str = "rerank-english-v3.0"
     RETRIEVE_CANDIDATES: int = 20               # over-fetch pool before rerank
 
-    # --- Week 2: hybrid retrieval (dense + BM25) ---
+    # --- Hybrid retrieval (dense + BM25) ---
     ENABLE_HYBRID: bool = False
     HYBRID_ALPHA: float = 0.5                   # 1.0 = dense only, 0.0 = sparse only
 
-    # --- Week 3: agentic routing + web-search fallback ---
+    # --- Agentic routing + web-search fallback ---
     # ENABLE_AGENT routes each question (answer_from_docs | clarify | web_search)
-    # before retrieving. Off by default so /query stays the Week 2 pipeline.
+    # before retrieving. Off by default.
     ENABLE_AGENT: bool = False
-    # Web search is opt-in (the core demo must not depend on an external key).
+    # Web search is opt-in (core path must not depend on an external key).
     ENABLE_WEB_SEARCH: bool = False
     WEB_SEARCH_PROVIDER: str = "duckduckgo"     # duckduckgo (keyless) | tavily
     WEB_SEARCH_MAX_RESULTS: int = 5
 
-    # --- Week 3: RAGAS evaluation ---
+    # --- RAGAS evaluation ---
     EVAL_PROVIDER: str = "ragas"                # ragas | fake (fake = no LLM, for CI/demo)
     EVAL_QUESTIONS_PATH: str = "data/eval/questions.json"
     EVAL_RESULTS_PATH: str = "data/eval/results.json"   # cached last run (gitignored)

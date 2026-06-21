@@ -1,9 +1,7 @@
 """Upload router — POST /upload (triggers ingestion).
 
-Thin HTTP layer: validate the request, persist the file, hand off to
-IngestionService, shape the response. All real work lives in the service; the
-router never imports a vendor SDK. The IngestionService is injected via the
-factory, so this endpoint is agnostic to Gemini/Qdrant entirely.
+Thin HTTP layer: validate, persist the file, hand off to the injected
+IngestionService. No vendor SDK imported here.
 """
 
 from __future__ import annotations
@@ -40,7 +38,7 @@ async def upload(
     destination.write_bytes(await file.read())
 
     # Config problems (e.g. missing API key) raise ConfigurationError, which the
-    # app-level handler in main.py turns into a clean 503 — no try/except needed.
+    # app-level handler in main.py turns into a 503 — no try/except needed.
     result = service.ingest_file(
         file_path=str(destination),
         source_name=file.filename,
