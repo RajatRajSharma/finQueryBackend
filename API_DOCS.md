@@ -14,7 +14,7 @@ Liveness — is the process up? Touches no dependencies.
 
 **Output:**
 ```json
-{ "status": "ok", "service": "finquery-backend", "version": "0.1.0" }
+{ "status": "ok", "service": "finquery-backend", "version": "0.1.1" }
 ```
 
 ---

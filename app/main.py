@@ -11,7 +11,7 @@ from app.config import settings
 from app.core.errors import ConfigurationError, UpstreamServiceError
 from app.routers import admin, evals, health, query, upload
 
-app = FastAPI(title="FinQuery API", version="0.1.0")
+app = FastAPI(title="FinQuery API", version="0.1.1")
 
 app.add_middleware(
     CORSMiddleware,

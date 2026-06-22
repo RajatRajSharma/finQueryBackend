@@ -22,7 +22,7 @@ router = APIRouter(tags=["health"])
 @router.get("/health", response_model=HealthResponse)
 def liveness() -> HealthResponse:
     """Process is up. Intentionally touches no external service."""
-    return HealthResponse(status="ok", service="finquery-backend", version="0.1.0")
+    return HealthResponse(status="ok", service="finquery-backend", version="0.1.1")
 
 
 @router.get("/health/ready", response_model=ReadinessResponse)
