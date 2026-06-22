@@ -166,6 +166,25 @@ def test_hybrid_retrieval_fuses_dense_and_sparse():
     assert len(hits) == 2  # fused pool trimmed to top_k
 
 
+def test_per_request_override_flips_hybrid_default():
+    store = FakeVectorStore()
+    IngestionService(FakeParser(_PAGES_4), FakeChunker(), FakeEmbedder(), store).ingest_file(
+        "ignored.pdf", "Amazon.pdf", "Amazon"
+    )
+    sparse = FakeSparseRetriever([SearchHit(_chunk("Amazon.pdf::p3::c0"), 9.0)])
+    # Component available but hybrid OFF by default → dense-only unless requested.
+    service = RetrievalService(
+        FakeEmbedder(), store, top_k=2, sparse=sparse, candidates=4, hybrid_default=False
+    )
+
+    # Default: sparse provider untouched (dense-only fast path).
+    service.retrieve("anything")
+    assert sparse.searched is False
+    # use_hybrid=True flips it on for this request.
+    service.retrieve("anything", use_hybrid=True)
+    assert sparse.searched is True
+
+
 def test_prompt_includes_context_and_question():
     chunks = FakeChunker().chunk(_PAGES, "Amazon")
     prompt = build_prompt("What were net sales?", chunks)

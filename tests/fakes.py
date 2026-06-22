@@ -170,11 +170,13 @@ class FakeSparseRetriever(SparseRetriever):
     def __init__(self, hits: list[SearchHit] | None = None) -> None:
         self._hits = hits or []
         self.indexed: list[Chunk] = []
+        self.searched = False  # set once search() runs, so tests can assert it was used
 
     def index(self, chunks: list[Chunk]) -> None:
         self.indexed = list(chunks)
 
     def search(self, question: str, top_k: int) -> list[SearchHit]:
+        self.searched = True
         return self._hits[:top_k]
 
 

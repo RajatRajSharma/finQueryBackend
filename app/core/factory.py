@@ -91,9 +91,16 @@ def get_web_search_tool() -> WebSearchTool | None:
 
 @lru_cache
 def get_reranker() -> Reranker | None:
-    """Reranker, or None when ENABLE_RERANK is off. Lazy-imports the cohere SDK
-    (and requires a key) only when enabled."""
-    if not settings.ENABLE_RERANK:
+    """Cohere reranker when a COHERE_API_KEY is configured, else None. Built on
+    key presence (not on ENABLE_RERANK) so a per-request `use_rerank=true` can
+    turn it on; ENABLE_RERANK only sets the default. Errors if rerank is the
+    default but no key is set. Lazy-imports the cohere SDK only when built."""
+    if not settings.COHERE_API_KEY.strip():
+        if settings.ENABLE_RERANK:
+            raise ValueError(
+                "ENABLE_RERANK=true but COHERE_API_KEY is empty - set it in .env "
+                "(or ENABLE_RERANK=false)."
+            )
         return None
     provider = settings.RERANK_PROVIDER.lower()
     if provider == "cohere":
@@ -104,11 +111,11 @@ def get_reranker() -> Reranker | None:
 
 
 @lru_cache
-def get_sparse_retriever() -> SparseRetriever | None:
-    """BM25 keyword retriever, or None when ENABLE_HYBRID is off. Indexed once
-    from the current vector-store contents (freshness trade-off: see bm25_index.py)."""
-    if not settings.ENABLE_HYBRID:
-        return None
+def get_sparse_retriever() -> SparseRetriever:
+    """BM25 keyword retriever, indexed once from the current vector-store contents
+    (freshness trade-off: see bm25_index.py). Built lazily on first use, not gated
+    on ENABLE_HYBRID, so a per-request `use_hybrid=true` can turn it on even when
+    hybrid is off by default; ENABLE_HYBRID only sets the default."""
     from app.clients.bm25_index import Bm25Retriever
 
     retriever = Bm25Retriever()
@@ -161,15 +168,19 @@ def get_ingestion_service() -> IngestionService:
 
 
 def get_retrieval_service() -> RetrievalService:
-    """Assemble the retrieval step. With reranker/sparse None, this is dense-only."""
+    """Assemble the retrieval step. The sparse/rerank stages are passed as lazy
+    providers (built on first use), with ENABLE_HYBRID/ENABLE_RERANK as the
+    defaults a per-request `use_hybrid`/`use_rerank` can override."""
     return RetrievalService(
         embedder=get_embedder(),
         vector_store=get_vector_store(),
         top_k=settings.TOP_K,
-        reranker=get_reranker(),
-        sparse=get_sparse_retriever(),
+        reranker=get_reranker,
+        sparse=get_sparse_retriever,
         candidates=settings.RETRIEVE_CANDIDATES,
         hybrid_alpha=settings.HYBRID_ALPHA,
+        hybrid_default=settings.ENABLE_HYBRID,
+        rerank_default=settings.ENABLE_RERANK,
     )
 
 

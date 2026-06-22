@@ -62,6 +62,16 @@ Ask a question; returns a grounded answer with citations. (With the agent on, ma
 ```
 `top_k` is optional (defaults to the configured value).
 
+**Query params** (optional, override the server defaults per request):
+- `use_hybrid` (bool) — turn dense+BM25 fusion on/off for this request. Default: `ENABLE_HYBRID`.
+- `use_rerank` (bool) — turn Cohere reranking on/off for this request. Default: `ENABLE_RERANK` (requires `COHERE_API_KEY`; a no-op if no key is set).
+
+Full URL with every option set:
+```
+POST http://localhost:8000/query?use_hybrid=true&use_rerank=true
+```
+Omit a param to keep the server default; e.g. `?use_hybrid=false` flips only fusion and leaves rerank on its `ENABLE_RERANK` default. (`top_k` is a body field, not a query param.)
+
 **Output:**
 ```json
 {
@@ -86,7 +96,12 @@ Ask a question; returns a grounded answer with citations. (With the agent on, ma
 ## POST `/query/stream`
 Same as `/query`, but streams the answer over SSE (Server-Sent Events).
 
-**Input:** same body as `/query`.
+**Input:** same body and `use_hybrid`/`use_rerank` query params as `/query`.
+
+Full URL with every option set:
+```
+POST http://localhost:8000/query/stream?use_hybrid=true&use_rerank=true
+```
 
 **Output:** an SSE event stream:
 ```
@@ -125,7 +140,12 @@ Return the last cached RAGAS evaluation run (instant). 404 if none yet.
 ## POST `/evals/run`
 Kick off a fresh evaluation in the background (slow + quota-heavy). 409 if one is already running.
 
-**Input:** optional query param `as_baseline=true` to save the run as the before/after reference.
+**Input:** optional query param `as_baseline` (bool, default `false`) to save the run as the before/after reference.
+
+Full URL with the option set:
+```
+POST http://localhost:8000/evals/run?as_baseline=true
+```
 ```bash
 curl -X POST "http://localhost:8000/evals/run?as_baseline=false"
 ```
@@ -143,7 +163,12 @@ Admin-only. Delete every stored chunk whose document isn't in the canonical `dat
 
 **Input:**
 - Header `X-Admin-Token: <ADMIN_API_KEY>` (required; 503 if the key is unset, 401 if it mismatches).
-- Optional query param `apply=true` to actually delete (omitted = dry run).
+- Optional query param `apply` (bool, default `false`/omitted = dry run); `apply=true` actually deletes.
+
+Full URL with the option set:
+```
+POST http://localhost:8000/admin/prune?apply=true
+```
 ```bash
 curl -X POST "http://localhost:8000/admin/prune?apply=true" -H "X-Admin-Token: <key>"
 ```

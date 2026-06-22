@@ -358,8 +358,8 @@ flowchart LR
 | `QDRANT_URL` / `QDRANT_COLLECTION` | `http://localhost:6333` / `finquery_chunks` | search database location |
 | `QDRANT_API_KEY` | — | blank locally; set for Qdrant Cloud (production) |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` / `TOP_K` | `512` / `50` / `5` | slicing + how many chunks the AI sees |
-| `ENABLE_HYBRID` / `HYBRID_ALPHA` | `false` / `0.5` | dense+BM25 fusion (`1.0`=meaning only, `0.0`=keywords only) |
-| `ENABLE_RERANK` / `RERANK_MODEL` | `false` / `rerank-english-v3.0` | Cohere re-ranking (needs `COHERE_API_KEY`) |
+| `ENABLE_HYBRID` / `HYBRID_ALPHA` | `false` / `0.5` | dense+BM25 fusion (`1.0`=meaning only, `0.0`=keywords only); the default for the `use_hybrid` query param |
+| `ENABLE_RERANK` / `RERANK_MODEL` | `false` / `rerank-english-v3.0` | Cohere re-ranking (needs `COHERE_API_KEY`); the default for the `use_rerank` query param |
 | `RETRIEVE_CANDIDATES` | `20` | size of the over-fetch pool (top-N) before fuse/rerank |
 | `ENABLE_AGENT` | `false` | router: answer / clarify / web |
 | `ENABLE_WEB_SEARCH` / `WEB_SEARCH_PROVIDER` | `false` / `duckduckgo` | optional web fallback (keyless) |

@@ -48,6 +48,8 @@ def _to_web_sources(results) -> list[WebSource]:
 @router.post("/query", response_model=QueryResponse)
 def query(
     request: QueryRequest,
+    use_hybrid: bool | None = None,
+    use_rerank: bool | None = None,
     retrieval: RetrievalService = Depends(get_retrieval_service),
     generation: GenerationService = Depends(get_generation_service),
     agent: QueryRouter | None = Depends(get_query_router),
@@ -73,7 +75,9 @@ def query(
         )
 
     # Answer from docs (the default, and the fallback when web is unavailable).
-    hits = retrieval.retrieve(request.question, top_k=request.top_k)
+    hits = retrieval.retrieve(
+        request.question, top_k=request.top_k, use_hybrid=use_hybrid, use_rerank=use_rerank
+    )
     answer = generation.generate_answer(request.question, [h.chunk for h in hits])
     citations = [Citation(**c) for c in build_citations(hits)]
     effective = ROUTE_ANSWER if surfaced_route == ROUTE_WEB else surfaced_route
@@ -83,6 +87,8 @@ def query(
 @router.post("/query/stream")
 def query_stream(
     request: QueryRequest,
+    use_hybrid: bool | None = None,
+    use_rerank: bool | None = None,
     retrieval: RetrievalService = Depends(get_retrieval_service),
     generation: GenerationService = Depends(get_generation_service),
     agent: QueryRouter | None = Depends(get_query_router),
@@ -116,7 +122,9 @@ def query_stream(
         return EventSourceResponse(web_stream())
 
     # Answer from docs: retrieve up front (citations known), then stream.
-    hits = retrieval.retrieve(request.question, top_k=request.top_k)
+    hits = retrieval.retrieve(
+        request.question, top_k=request.top_k, use_hybrid=use_hybrid, use_rerank=use_rerank
+    )
     citations = build_citations(hits)
     contexts = [h.chunk for h in hits]
 

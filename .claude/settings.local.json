@@ -3,7 +3,8 @@
     "allow": [
       "Bash(git check-ignore *)",
       "Bash(docker compose *)",
-      "Bash(docker rmi *)"
+      "Bash(docker rmi *)",
+      "Bash(python -m pytest -q)"
     ]
   }
 }
